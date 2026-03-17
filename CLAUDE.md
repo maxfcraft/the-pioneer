@@ -1,8 +1,8 @@
 # CLAUDE.md — The Auburn Blueprint
 
 ## Who I Am
-- Name: Daniel Coburn
-- Student at Auburn University
+- Name: Max Fayrweather
+- Fresham Student at Auburn University
 - Founder of The Auburn Blueprint (https://whop.com/joined/auburnblueprint/)
 - Windows user, Claude Pro plan
 
@@ -10,7 +10,7 @@
 - **Platform**: Whop.com
 - **Product**: Course + community helping incoming Auburn students/families navigate Auburn
 - **Free tier**: Camp War Eagle & Registration Guide (49 members)
-- **Paid tier**: Auburn Blueprint Full Course ($50) — covers scheduling, Rate My Professor, housing (on/off campus), transportation (Tiger Transit), football tickets
+- **Paid tier**: Auburn Blueprint Full Course ($50) — covers scheduling, Rate My Professor, housing (on/off campus), transportation (Tiger Transit), football tickets Nobody has joined yetstarting to market it now.
 - **Content format**: Video lessons (multimedia) + PDFs + community chat
 - **Current size**: 50 members
 - **Revenue model**: One-time $50 course purchase + potential upsells
@@ -45,11 +45,16 @@
 - Math help: Teach clearly, show where I went wrong first, then fix, then continue
 - Code: Explain what you are building and why before writing it
 - Always think about scalability and automation
-- I want to be at the forefront of AI tooling — push me toward best practices
+- I want to be at the forefront of AI tooling — push me toward best practices and always tell me if this will make me print and make money tell me if something isnt the smartest and what is the smartest way to make the money.
+
+  ## History
+  - Created a pressurewashing business 2 years ago and pushed it to 5k + making 1.5k in 5 days one time until I had to go to auburn university college.
+  - Did tiktokshop for 4 months and had brand deals getting payed for 30 videos 1kish for 4 months each
+  - Big entrepreneur with goals to drop out of college and go live isolated by the beach in bali or in the swizz or italian alps
 
 ## Tech Context
 - OS: Windows
 - Platform: Whop.com for course hosting
-- Familiar with: Basic business operations, content creation
+- Familiar with: Basic business operations, content creation, marketing, business basics and more.
 - Learning: Programming, API integrations, AI automation
-- Subscriptions: Claude Pro ($20/mo)
+- Subscriptions: Claude Pro ($20/mo) 
