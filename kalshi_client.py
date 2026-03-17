@@ -37,7 +37,10 @@ class KalshiClient:
         message = f"{timestamp_ms}{method}{path}"
         signature = self.private_key.sign(
             message.encode("utf-8"),
-            padding.PKCS1v15(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.DIGEST_LENGTH,
+            ),
             hashes.SHA256(),
         )
         return base64.b64encode(signature).decode("utf-8")
@@ -57,7 +60,9 @@ class KalshiClient:
     def _request(self, method: str, path: str, params: dict = None, json_body: dict = None):
         """Make an authenticated request to the Kalshi API."""
         url = f"{self.base_url}{path}"
-        headers = self._build_headers(method.upper(), path)
+        # Kalshi requires signing the full path (e.g. /trade-api/v2/portfolio/balance)
+        full_path = "/trade-api/v2" + path
+        headers = self._build_headers(method.upper(), full_path)
 
         response = self.session.request(
             method=method.upper(),
