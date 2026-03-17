@@ -3,7 +3,7 @@
 ## Who I Am
 - Name: Max Fayrweather
 - Fresham Student at Auburn University
-- Founder of The Auburn Blueprint (https://whop.com/joined/auburnblueprint/)
+- Founder of The Auburn Blueprint with my business partner (https://whop.com/joined/auburnblueprint/)
 - Windows user, Claude Pro plan
 
 ## The Business
