@@ -240,14 +240,23 @@ def main():
     set_activity_tracker(tracker)
     set_kalshi_client(client)
 
-    # Test connection by fetching markets
+    # Test connection with a lightweight balance check first
+    try:
+        bal = client.get_balance()
+        print(f"[INIT] Connected to Kalshi — Balance: ${bal.get('balance', 0) / 100:.2f}")
+    except Exception as e:
+        print(f"[FATAL] Failed to connect to Kalshi API: {e}")
+        sys.exit(1)
+
+    # Now fetch weather markets (with retry logic for rate limits)
     try:
         markets = client.get_weather_markets()
         market_count = len(markets)
         print(f"[INIT] Found {market_count} weather markets")
     except Exception as e:
-        print(f"[FATAL] Failed to connect to Kalshi API: {e}")
-        sys.exit(1)
+        print(f"[WARNING] Could not fetch markets on startup: {e}")
+        print("[INIT] Will retry on first scan cycle...")
+        market_count = 0
 
     # Record bot start
     tracker.record_start()

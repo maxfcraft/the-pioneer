@@ -168,5 +168,6 @@ class KalshiClient:
             cursor = data.get("cursor")
             if not cursor or not markets:
                 break
+            time.sleep(0.5)  # pace requests to avoid 429 rate limits
 
         return all_markets
