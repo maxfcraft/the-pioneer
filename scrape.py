@@ -36,13 +36,21 @@ async def main():
 
     # Phase 2 — Facebook search (requires FB login in .env)
     print("\n[2/3] Deep Facebook search (300+ term variations + chain discovery)...")
-    print("      Requires FB_EMAIL and FB_PASSWORD in .env")
-    fb_results = await run_deep_facebook_scan()
-    if "error" in fb_results:
-        print(f"      Warning: {fb_results['error']}")
-        print("      Skipping Facebook search. Dork results still saved.")
+    fb_email = os.getenv("FB_EMAIL")
+    fb_password = os.getenv("FB_PASSWORD")
+    if not fb_email or not fb_password:
+        print("      Skipped — FB_EMAIL and FB_PASSWORD not set in .env")
+        print("      Add them to run Phase 2 and find 10x more groups.")
     else:
-        print(f"      Done. {fb_results['total_groups_saved']} groups from Facebook search.")
+        try:
+            fb_results = await run_deep_facebook_scan()
+            if "error" in fb_results:
+                print(f"      Warning: {fb_results['error']}")
+            else:
+                print(f"      Done. {fb_results['total_groups_saved']} groups from Facebook search.")
+        except Exception as e:
+            print(f"      Phase 2 error: {e}")
+            print("      Skipping. Phase 1 and 3 results still saved.")
 
     # Phase 3 — Reddit
     print("\n[3/3] Reddit scan...")
