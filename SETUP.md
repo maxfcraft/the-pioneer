@@ -1,93 +1,54 @@
-# Auburn Blueprint Automation — Setup Guide
+# Auburn Blueprint Group Scraper
 
-## What This Does
+Finds every Auburn-related Facebook group and Reddit community,
+dumps everything into a formatted Excel sheet.
 
-- **Telegram bot** on your phone = full control panel
-- **Facebook Group Finder** = searches every Auburn group by city (Mobile, Huntsville, Birmingham, Atlanta, etc.)
-- **Group Blaster** = posts city-personalized AI messages to each group (sounds human, not spam)
-- **Marketplace Poster** = posts your $50 course listing so people searching "Auburn University" find you
-- **DM Responder** = auto-replies to anyone who messages you with a 3-stage funnel sequence
-- **Claude AI** = generates every message — local, human-sounding, specific to each city's high schools
-
----
-
-## Step 1: Get Your Telegram Bot Token
-
-1. Open Telegram, message `@BotFather`
-2. Send `/newbot`, follow prompts, get your token
-3. Message your new bot, then go to:
-   `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates`
-4. Copy your `chat_id` from the response
-
----
-
-## Step 2: Get Your Anthropic API Key
-
-1. Go to [console.anthropic.com](https://console.anthropic.com)
-2. Create an API key
-3. You have Claude Pro — your API key is separate from the app subscription
-
----
-
-## Step 3: Configure Your .env
-
-```
-cp .env.example .env
-```
-
-Edit `.env` with:
-- Your Telegram bot token + your chat ID
-- Your Facebook email + password
-- Your Anthropic API key
-
----
-
-## Step 4: Install Dependencies (Windows)
+## Setup (Windows)
 
 ```bash
 pip install -r requirements.txt
 playwright install chromium
+cp .env.example .env
+# Optionally add FB_EMAIL and FB_PASSWORD for deeper Facebook search
 ```
 
----
-
-## Step 5: Run the Bot
+## Run
 
 ```bash
-python main.py
+python scrape.py
 ```
 
-Open Telegram, message your bot `/start`.
+Excel file saves to `/exports/auburn_blueprint_outreach_TIMESTAMP.xlsx`
 
----
+## What It Does
 
-## Daily Workflow
+**Phase 1 — Google/Bing/DuckDuckGo dorking** (no login needed)
+Search engines independently index public FB groups. Queries like
+`site:facebook.com/groups "Auburn" "Mobile"` surface groups that
+Facebook's own search hides. 50+ queries across 3 engines.
 
-| Command | What it does |
+**Phase 2 — Deep Facebook search** (requires FB login in .env)
+300+ search term variations: 17 cities x 20 Auburn terms.
+Also does chain discovery — finds a group, follows its related groups sidebar.
+
+**Phase 3 — Reddit**
+Scans r/AuburnUniversity, city subreddits (r/Birmingham, r/Huntsville, etc.),
+parent/college subs. No login needed.
+
+## Excel Sheets
+
+| Sheet | Contents |
 |---|---|
-| `/find_groups` | Scans Facebook for every Auburn group in AL/FL/GA (run once a week) |
-| `/blast 5` | Posts to 5 new groups today — AI writes each one |
-| `/check_dms` | Checks Messenger and auto-replies to leads |
-| `/marketplace` | Posts a fresh Marketplace listing |
-| `/stats` | Shows total groups, posts, DMs, conversions |
-| `/preview Mobile` | See what the AI would post in a Mobile group before blasting |
-
----
-
-## Anti-Ban Strategy
-
-- Posts are spaced 3-8 minutes apart (randomized)
-- All typing is human-speed with random delays
-- Browser session is saved — logs in once, stays logged in
-- Messages are AI-generated and unique each time — not copy-paste
-- Limit to 5-10 group posts per day max
-
----
+| Stats Dashboard | Summary numbers |
+| Facebook Groups | Every group URL, city, clickable link |
+| Reddit Subreddits | Auburn-relevant communities |
+| Reddit Posts | Specific posts to engage with |
 
 ## Cities Covered
 
-Alabama: Mobile, Huntsville, Birmingham, Montgomery, Tuscaloosa, Dothan, Decatur, Gadsden
-Florida: Pensacola
-Georgia: Atlanta (north suburbs)
+Alabama: Mobile, Huntsville, Birmingham, Montgomery, Tuscaloosa, Dothan,
+Decatur, Gadsden, Auburn, Anniston, Florence, Phenix City
 
-Each city has its specific high schools baked in — the AI references them to sound local.
+Florida: Pensacola
+Georgia: Atlanta (north suburbs), Columbus
+Tennessee: Nashville, Memphis
