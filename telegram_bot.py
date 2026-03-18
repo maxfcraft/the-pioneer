@@ -21,6 +21,7 @@ from whale_detector import WhaleAlert
 # Will be set by main.py after ActivityTracker is created
 _activity_tracker = None
 _kalshi_client = None
+_paper_tracker = None
 
 
 def set_activity_tracker(tracker):
@@ -31,6 +32,11 @@ def set_activity_tracker(tracker):
 def set_kalshi_client(client):
     global _kalshi_client
     _kalshi_client = client
+
+
+def set_paper_tracker(tracker):
+    global _paper_tracker
+    _paper_tracker = tracker
 
 
 # ── Outbound messages ────────────────────────────────────────────
@@ -98,6 +104,7 @@ def send_startup_message(paper_mode: bool, market_count: int) -> bool:
         f"  /status  - Quick status check\n"
         f"  /today   - Today's full report\n"
         f"  /yesterday - Yesterday's summary\n"
+        f"  /recap   - Paper trade P&L recap\n"
         f"  /balance - Your Kalshi balance\n"
         f"  /help    - All commands\n"
         f"\n"
@@ -161,6 +168,23 @@ def _handle_command(text: str) -> str:
             return "Sir, here's yesterday's debrief.\n\n" + _activity_tracker.format_morning_report()
         return "Sir, I don't have any data from yesterday."
 
+    elif cmd in ("/recap", "recap"):
+        if _paper_tracker:
+            # Check latest prices before generating recap
+            if _kalshi_client:
+                _paper_tracker.check_outcomes(_kalshi_client)
+            today = _paper_tracker.get_today_trades()
+            if today:
+                recap = _paper_tracker.format_recap(today)
+                return f"Sir, here's your paper trade recap.\n\n{recap}"
+            # Try recent trades if nothing today
+            recent = _paper_tracker.get_recent_trades(days=7)
+            if recent:
+                recap = _paper_tracker.format_recap(recent)
+                return f"Sir, no trades today. Here's the last 7 days.\n\n{recap}"
+            return "Sir, no paper trades recorded yet. I'll track them when I detect whales."
+        return "Sir, the paper trade tracker isn't initialized yet."
+
     elif cmd in ("/balance", "balance"):
         if _kalshi_client:
             if not _kalshi_client.authenticated:
@@ -177,16 +201,17 @@ def _handle_command(text: str) -> str:
         return (
             "At your service, sir. Here's what I can do:\n"
             "\n"
-            "  /status     - Quick status + today's stats + balance\n"
+            "  /status     - Quick status + today's stats\n"
             "  /today      - Full report for today so far\n"
             "  /yesterday  - Yesterday's summary report\n"
-            "  /balance    - Your current Kalshi balance\n"
+            "  /recap      - Paper trade P&L recap\n"
+            "  /balance    - Your Kalshi balance\n"
             "  /help       - This message\n"
             "\n"
-            "You can also just say things like:\n"
-            "  'whats the update'\n"
-            "  'status'\n"
-            "  'balance'\n"
+            "You'll also get:\n"
+            "  - Whale alerts in real-time\n"
+            "  - Morning briefing at 7 AM\n"
+            "  - End-of-day trade recap at 9 PM\n"
             "\n"
             "I'm always listening, sir."
         )
@@ -194,7 +219,7 @@ def _handle_command(text: str) -> str:
     else:
         return (
             f"Sir, I didn't quite catch that — '{text}'.\n"
-            f"Try /status, /today, /yesterday, /balance, or /help."
+            f"Try /status, /today, /recap, /balance, or /help."
         )
 
 

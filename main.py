@@ -18,15 +18,18 @@ import math
 import os
 import sys
 import time
-from datetime import datetime, timezone
+import threading
+from datetime import datetime, timezone, timedelta
 
 import config
 from kalshi_client import KalshiClient
 from whale_detector import WhaleDetector, WhaleAlert
 from activity_tracker import ActivityTracker
+from paper_tracker import PaperTradeTracker
 from telegram_bot import (
     send_whale_alert, send_startup_message, send_error_message,
-    set_activity_tracker, set_kalshi_client, start_command_listener,
+    set_activity_tracker, set_kalshi_client, set_paper_tracker,
+    start_command_listener, _send_message,
 )
 from morning_report import start_morning_report_scheduler
 
@@ -116,7 +119,8 @@ def copy_trade(client: KalshiClient, alert: WhaleAlert, balance_cents: int) -> t
         return False, copy_count, cost_cents
 
 
-def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTracker):
+def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTracker,
+             paper_tracker: PaperTradeTracker = None):
     """Run one full scan cycle across all weather markets."""
     # Fetch balance once per scan cycle for position sizing (skip if no auth)
     balance_cents = 0
@@ -169,6 +173,18 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
             send_whale_alert(alert, trade_placed, config.PAPER_TRADING, balance_cents)
             log_whale(alert, trade_placed, copy_count)
 
+            # Record paper trade for outcome tracking
+            if config.PAPER_TRADING and paper_tracker and copy_count > 0:
+                paper_tracker.record_trade(
+                    ticker=alert.market_ticker,
+                    title=alert.market_title,
+                    side=alert.trade_side,
+                    price_cents=alert.trade_price_cents,
+                    count=copy_count,
+                    multiplier=alert.multiplier,
+                    confidence=alert.confidence_score,
+                )
+
             # Track in activity log
             tracker.record_whale(
                 ticker=alert.market_ticker,
@@ -195,6 +211,58 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
 
     if total_whales == 0:
         print("  No whales this cycle")
+
+
+def _eod_recap_loop(client: KalshiClient, paper_tracker: PaperTradeTracker):
+    """Background thread: sends end-of-day paper trade recap at 9 PM Eastern."""
+    recap_hour = 21  # 9 PM
+    utc_offset = config.MORNING_REPORT_UTC_OFFSET  # -4 for EDT
+    recap_utc_hour = (recap_hour - utc_offset) % 24
+
+    print(f"[EOD RECAP] Scheduler started — recaps at {recap_hour}:00 (UTC{utc_offset:+d})")
+
+    while True:
+        now = datetime.now(timezone.utc)
+        target = now.replace(hour=recap_utc_hour, minute=0, second=0, microsecond=0)
+        if target <= now:
+            target += timedelta(days=1)
+
+        wait_secs = (target - datetime.now(timezone.utc)).total_seconds()
+        print(f"[EOD RECAP] Next recap at {target.strftime('%Y-%m-%d %H:%M UTC')} "
+              f"({wait_secs/3600:.1f}h from now)")
+
+        while True:
+            remaining = (target - datetime.now(timezone.utc)).total_seconds()
+            if remaining <= 0:
+                break
+            time.sleep(min(remaining, 60))
+
+        # Check outcomes for today's paper trades
+        try:
+            paper_tracker.check_outcomes(client)
+            today_trades = paper_tracker.get_today_trades()
+            if today_trades:
+                recap = paper_tracker.format_recap(today_trades)
+                msg = f"Good evening, sir. Here's how today's whale trades performed.\n\n{recap}"
+                _send_message(msg)
+                print(f"[EOD RECAP] Sent recap for {len(today_trades)} paper trades")
+            else:
+                _send_message(
+                    "Good evening, sir. No whale trades detected today. "
+                    "Markets were quiet. I'll keep watching."
+                )
+                print("[EOD RECAP] No trades today, sent quiet day message")
+        except Exception as e:
+            print(f"[EOD RECAP ERROR] {e}")
+
+        time.sleep(61)  # avoid double-send
+
+
+def start_eod_recap_scheduler(client: KalshiClient, paper_tracker: PaperTradeTracker):
+    """Start the background thread for end-of-day paper trade recaps."""
+    thread = threading.Thread(target=_eod_recap_loop, args=(client, paper_tracker), daemon=True)
+    thread.start()
+    return thread
 
 
 def main():
@@ -251,6 +319,13 @@ def main():
         print(f"[FATAL] Could not fetch markets from Kalshi: {e}")
         sys.exit(1)
 
+    # Initialize paper trade tracker
+    paper_tracker = PaperTradeTracker()
+    set_paper_tracker(paper_tracker)
+    existing = len(paper_tracker.trades)
+    if existing:
+        print(f"[INIT] Paper tracker loaded ({existing} historical trades)")
+
     # Record bot start
     tracker.record_start()
 
@@ -266,6 +341,10 @@ def main():
     start_morning_report_scheduler(tracker)
     print("[INIT] Morning report scheduler started (7 AM daily)")
 
+    # Start end-of-day recap scheduler (background thread)
+    start_eod_recap_scheduler(client, paper_tracker)
+    print("[INIT] End-of-day recap scheduler started (9 PM daily)")
+
     print("\n[RUNNING] Bot is now monitoring. Press Ctrl+C to stop.\n")
 
     # Main loop
@@ -276,7 +355,7 @@ def main():
         print(f"[Cycle {cycle}] {timestamp} — Scanning {config.MARKET_FILTER} markets...")
 
         try:
-            run_scan(client, detector, tracker)
+            run_scan(client, detector, tracker, paper_tracker)
         except KeyboardInterrupt:
             raise
         except Exception as e:
