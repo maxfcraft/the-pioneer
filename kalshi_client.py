@@ -162,18 +162,20 @@ class KalshiClient:
 
     def get_weather_markets(self) -> list:
         """
-        Fetch all open markets whose ticker contains the MARKET_FILTER string.
+        Fetch all open markets whose ticker matches any of the MARKET_FILTER patterns.
+        Supports comma-separated filters (e.g., "KXHIGH,KXRAIN,KXSNOW").
         Paginates through all results.
         """
         all_markets = []
         cursor = None
-        market_filter = config.MARKET_FILTER.upper()
+        filters = [f.strip().upper() for f in config.MARKET_FILTER.split(",") if f.strip()]
 
         while True:
             data = self.get_markets(cursor=cursor, limit=200)
             markets = data.get("markets", [])
             for m in markets:
-                if market_filter in m.get("ticker", "").upper():
+                ticker_upper = m.get("ticker", "").upper()
+                if any(f in ticker_upper for f in filters):
                     all_markets.append(m)
             cursor = data.get("cursor")
             if not cursor or not markets:

@@ -34,9 +34,10 @@ PAPER_TRADING = os.getenv("PAPER_TRADING", "true").lower() == "true"
 TRADE_LOG_FILE = os.getenv("TRADE_LOG_FILE", "whale_trades.csv")
 
 # --- Market Filter ---
-# Only monitor markets whose ticker contains this string (case-insensitive)
-# Examples: "WEATHER", "TEMP", "RAIN"
-MARKET_FILTER = os.getenv("MARKET_FILTER", "WEATHER")
+# Comma-separated list of ticker substrings to match (case-insensitive)
+# Kalshi weather tickers: KXHIGH (daily temps), KXHMONTHRANGE (monthly),
+# KXRAIN, KXSNOW, KXWIND, etc.
+MARKET_FILTER = os.getenv("MARKET_FILTER", "KXHIGH,KXHMONTHRANGE,KXRAIN,KXSNOW,KXWIND")
 
 # --- Morning Report ---
 MORNING_REPORT_HOUR = int(os.getenv("MORNING_REPORT_HOUR", "7"))

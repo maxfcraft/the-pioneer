@@ -352,7 +352,7 @@ def main():
     while True:
         cycle += 1
         timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
-        print(f"[Cycle {cycle}] {timestamp} — Scanning {config.MARKET_FILTER} markets...")
+        print(f"[Cycle {cycle}] {timestamp} — Scanning weather markets...")
 
         try:
             run_scan(client, detector, tracker, paper_tracker)
