@@ -62,7 +62,7 @@ def auto_column_widths(ws):
 
 
 async def build_facebook_sheet(wb: openpyxl.Workbook):
-    ws = wb.active
+    ws = wb.create_sheet("Facebook Groups")
     ws.title = "Facebook Groups"
     ws.row_dimensions[1].height = 30
 
