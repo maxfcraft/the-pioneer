@@ -66,24 +66,27 @@ def log_whale(alert: WhaleAlert, trade_placed: bool, copy_count: int):
         ])
 
 
-def copy_trade(client: KalshiClient, alert: WhaleAlert) -> tuple[bool, int]:
+def copy_trade(client: KalshiClient, alert: WhaleAlert, balance_cents: int) -> tuple[bool, int, int]:
     """
-    Copy a whale trade at a fraction of their size.
+    Copy a whale trade sized as a percentage of your portfolio balance.
 
     Returns:
-        (success, contract_count) — whether the order went through and how many contracts
+        (success, contract_count, risk_cents) — whether the order went through,
+        how many contracts, and total cost in cents
     """
-    copy_count = max(1, math.floor(alert.trade_count * config.COPY_TRADE_FRACTION))
+    risk_cents = math.floor(balance_cents * config.PORTFOLIO_RISK_FRACTION)
+    copy_count = max(1, risk_cents // alert.trade_price_cents)
     cost_cents = copy_count * alert.trade_price_cents
 
     if cost_cents < config.MIN_TRADE_SIZE_CENTS:
         print(f"  [SKIP] Copy trade too small: {cost_cents}c < {config.MIN_TRADE_SIZE_CENTS}c minimum")
-        return False, 0
+        return False, 0, 0
 
     if config.PAPER_TRADING:
         print(f"  [PAPER] Would place: {copy_count} contracts {alert.trade_side.upper()} "
-              f"@ {alert.trade_price_cents}c on {alert.market_ticker}")
-        return False, copy_count
+              f"@ {alert.trade_price_cents}c on {alert.market_ticker} "
+              f"(${cost_cents/100:.2f} = {int(config.PORTFOLIO_RISK_FRACTION*100)}% of ${balance_cents/100:.2f} balance)")
+        return False, copy_count, cost_cents
 
     try:
         result = client.place_order(
@@ -95,17 +98,27 @@ def copy_trade(client: KalshiClient, alert: WhaleAlert) -> tuple[bool, int]:
         )
         order_id = result.get("order", {}).get("order_id", "unknown")
         print(f"  [TRADE] Order placed: {copy_count} contracts {alert.trade_side.upper()} "
-              f"@ {alert.trade_price_cents}c — Order ID: {order_id}")
-        return True, copy_count
+              f"@ {alert.trade_price_cents}c — Order ID: {order_id} "
+              f"(${cost_cents/100:.2f} = {int(config.PORTFOLIO_RISK_FRACTION*100)}% of balance)")
+        return True, copy_count, cost_cents
     except Exception as e:
         error_msg = f"Failed to place copy trade on {alert.market_ticker}: {e}"
         print(f"  [ERROR] {error_msg}")
         send_error_message(error_msg)
-        return False, copy_count
+        return False, copy_count, cost_cents
 
 
 def run_scan(client: KalshiClient, detector: WhaleDetector):
     """Run one full scan cycle across all weather markets."""
+    # Fetch balance once per scan cycle for position sizing
+    try:
+        balance_data = client.get_balance()
+        balance_cents = balance_data.get("balance", 0)
+        print(f"  Portfolio balance: ${balance_cents / 100:.2f}")
+    except Exception as e:
+        print(f"[ERROR] Failed to fetch balance: {e}")
+        balance_cents = 0
+
     try:
         markets = client.get_weather_markets()
     except Exception as e:
@@ -141,8 +154,8 @@ def run_scan(client: KalshiClient, detector: WhaleDetector):
             print(f"    Side: {alert.trade_side.upper()} @ {alert.trade_price_cents}c")
             print(f"    Confidence: {alert.confidence_score}/100")
 
-            trade_placed, copy_count = copy_trade(client, alert)
-            send_whale_alert(alert, trade_placed, config.PAPER_TRADING)
+            trade_placed, copy_count, cost_cents = copy_trade(client, alert, balance_cents)
+            send_whale_alert(alert, trade_placed, config.PAPER_TRADING, balance_cents)
             log_whale(alert, trade_placed, copy_count)
 
     if total_whales == 0:
@@ -155,7 +168,7 @@ def main():
     print("  KALSHI WEATHER WHALE BOT")
     print(f"  Mode: {'PAPER TRADING' if config.PAPER_TRADING else 'LIVE TRADING'}")
     print(f"  Threshold: {config.WHALE_THRESHOLD_MULTIPLIER}x average")
-    print(f"  Copy fraction: {int(config.COPY_TRADE_FRACTION * 100)}%")
+    print(f"  Portfolio risk: {int(config.PORTFOLIO_RISK_FRACTION * 100)}% per trade")
     print(f"  Poll interval: {config.POLL_INTERVAL_SECONDS}s")
     print(f"  Market filter: {config.MARKET_FILTER}")
     print("=" * 50)

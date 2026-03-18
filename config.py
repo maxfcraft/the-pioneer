@@ -19,8 +19,8 @@ WHALE_THRESHOLD_MULTIPLIER = float(os.getenv("WHALE_THRESHOLD_MULTIPLIER", "10")
 ROLLING_WINDOW_SIZE = int(os.getenv("ROLLING_WINDOW_SIZE", "100"))
 
 # --- Trading ---
-# What fraction of the whale's trade size to copy (0.10 = 10%)
-COPY_TRADE_FRACTION = float(os.getenv("COPY_TRADE_FRACTION", "0.10"))
+# What percentage of your portfolio balance to risk per whale trade (0.15 = 15%)
+PORTFOLIO_RISK_FRACTION = float(os.getenv("PORTFOLIO_RISK_FRACTION", "0.15"))
 # Minimum trade size in cents to place (avoids dust trades)
 MIN_TRADE_SIZE_CENTS = int(os.getenv("MIN_TRADE_SIZE_CENTS", "100"))
 

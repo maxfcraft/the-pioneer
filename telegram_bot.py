@@ -10,7 +10,8 @@ import config
 from whale_detector import WhaleAlert
 
 
-def send_whale_alert(alert: WhaleAlert, trade_placed: bool, paper_mode: bool) -> bool:
+def send_whale_alert(alert: WhaleAlert, trade_placed: bool, paper_mode: bool,
+                     balance_cents: int = 0) -> bool:
     """
     Send a formatted whale alert message to Telegram.
 
@@ -18,6 +19,7 @@ def send_whale_alert(alert: WhaleAlert, trade_placed: bool, paper_mode: bool) ->
         alert: The WhaleAlert object with all trade details
         trade_placed: Whether a copy-trade was actually placed
         paper_mode: Whether we're in paper trading mode
+        balance_cents: Current portfolio balance in cents
 
     Returns:
         True if message sent successfully, False otherwise
@@ -28,7 +30,11 @@ def send_whale_alert(alert: WhaleAlert, trade_placed: bool, paper_mode: bool) ->
         trade_status = "PAPER MODE (no real trade)"
 
     whale_size_dollars = alert.trade_total_cents / 100
-    copy_size_dollars = (alert.trade_count * config.COPY_TRADE_FRACTION * alert.trade_price_cents) / 100
+    balance_dollars = balance_cents / 100
+    risk_pct = int(config.PORTFOLIO_RISK_FRACTION * 100)
+    risk_dollars = balance_dollars * config.PORTFOLIO_RISK_FRACTION
+    copy_count = max(1, int(risk_dollars * 100) // alert.trade_price_cents)
+    copy_cost_dollars = (copy_count * alert.trade_price_cents) / 100
 
     message = (
         f"{'='*30}\n"
@@ -38,16 +44,17 @@ def send_whale_alert(alert: WhaleAlert, trade_placed: bool, paper_mode: bool) ->
         f"Market: {alert.market_title}\n"
         f"Ticker: {alert.market_ticker}\n"
         f"\n"
-        f"Trade Size: {alert.trade_count} contracts\n"
+        f"Whale Trade: {alert.trade_count} contracts\n"
         f"Direction: {alert.trade_side.upper()}\n"
         f"Price: {alert.trade_price_cents}c per contract\n"
-        f"Total Value: ${whale_size_dollars:,.2f}\n"
+        f"Whale Total: ${whale_size_dollars:,.2f}\n"
         f"\n"
         f"Rolling Avg: {alert.rolling_average} contracts\n"
         f"Multiplier: {alert.multiplier}x average\n"
         f"Confidence: {alert.confidence_score}/100\n"
         f"\n"
-        f"Copy Trade Size: ${copy_size_dollars:,.2f} ({int(config.COPY_TRADE_FRACTION * 100)}% of whale)\n"
+        f"Your Balance: ${balance_dollars:,.2f}\n"
+        f"Your Trade: {copy_count} contracts @ {alert.trade_price_cents}c = ${copy_cost_dollars:,.2f} ({risk_pct}% of balance)\n"
         f"Status: {trade_status}\n"
         f"{'='*30}"
     )
@@ -64,7 +71,7 @@ def send_startup_message(paper_mode: bool, market_count: int) -> bool:
         f"Monitoring: {market_count} weather markets\n"
         f"Threshold: {config.WHALE_THRESHOLD_MULTIPLIER}x average\n"
         f"Poll interval: {config.POLL_INTERVAL_SECONDS}s\n"
-        f"Copy fraction: {int(config.COPY_TRADE_FRACTION * 100)}%"
+        f"Portfolio risk: {int(config.PORTFOLIO_RISK_FRACTION * 100)}% per trade"
     )
     return _send_message(message)
 
