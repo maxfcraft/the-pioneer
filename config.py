@@ -37,3 +37,8 @@ TRADE_LOG_FILE = os.getenv("TRADE_LOG_FILE", "whale_trades.csv")
 # Only monitor markets whose ticker contains this string (case-insensitive)
 # Examples: "WEATHER", "TEMP", "RAIN"
 MARKET_FILTER = os.getenv("MARKET_FILTER", "WEATHER")
+
+# --- Morning Report ---
+MORNING_REPORT_HOUR = int(os.getenv("MORNING_REPORT_HOUR", "7"))
+MORNING_REPORT_MINUTE = int(os.getenv("MORNING_REPORT_MINUTE", "0"))
+MORNING_REPORT_UTC_OFFSET = int(os.getenv("MORNING_REPORT_UTC_OFFSET", "-4"))

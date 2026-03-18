@@ -41,6 +41,8 @@ class WhaleDetector:
         )
         # market_ticker -> set of trade IDs we already processed
         self.seen_trade_ids: dict[str, set] = defaultdict(set)
+        # Recent near-miss trades (close to threshold but didn't trigger)
+        self.last_near_misses: list = []
 
     def _calculate_rolling_average(self, ticker: str) -> float:
         """Calculate the average trade size for a market's rolling window."""
@@ -110,6 +112,19 @@ class WhaleDetector:
                 continue
 
             multiplier = count / rolling_avg
+
+            # Track near misses (50%+ of threshold but didn't trigger)
+            if multiplier >= config.WHALE_THRESHOLD_MULTIPLIER * 0.5 and multiplier < config.WHALE_THRESHOLD_MULTIPLIER:
+                self.last_near_misses.append({
+                    "ticker": ticker,
+                    "title": market_title,
+                    "count": count,
+                    "rolling_avg": rolling_avg,
+                    "multiplier": multiplier,
+                })
+                # Keep only last 10
+                if len(self.last_near_misses) > 10:
+                    self.last_near_misses.pop(0)
 
             if multiplier >= config.WHALE_THRESHOLD_MULTIPLIER:
                 confidence = self._calculate_confidence(

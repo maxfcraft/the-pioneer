@@ -3,3 +3,4 @@
 __pycache__/
 *.pyc
 whale_trades.csv
+daily_activity.json

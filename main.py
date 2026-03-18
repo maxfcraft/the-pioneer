@@ -8,6 +8,9 @@ Runs a continuous loop that:
 4. Sends Telegram alerts for any whales found
 5. Optionally copies the trade (or skips in paper mode)
 6. Logs everything to a CSV file
+7. Tracks daily activity for status reports
+8. Listens for Telegram commands (/status, /today, etc.)
+9. Sends automated morning report at 7 AM
 """
 
 import csv
@@ -20,7 +23,12 @@ from datetime import datetime, timezone
 import config
 from kalshi_client import KalshiClient
 from whale_detector import WhaleDetector, WhaleAlert
-from telegram_bot import send_whale_alert, send_startup_message, send_error_message
+from activity_tracker import ActivityTracker
+from telegram_bot import (
+    send_whale_alert, send_startup_message, send_error_message,
+    set_activity_tracker, set_kalshi_client, start_command_listener,
+)
+from morning_report import start_morning_report_scheduler
 
 
 def init_csv_log():
@@ -108,7 +116,7 @@ def copy_trade(client: KalshiClient, alert: WhaleAlert, balance_cents: int) -> t
         return False, copy_count, cost_cents
 
 
-def run_scan(client: KalshiClient, detector: WhaleDetector):
+def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTracker):
     """Run one full scan cycle across all weather markets."""
     # Fetch balance once per scan cycle for position sizing
     try:
@@ -123,6 +131,7 @@ def run_scan(client: KalshiClient, detector: WhaleDetector):
         markets = client.get_weather_markets()
     except Exception as e:
         print(f"[ERROR] Failed to fetch markets: {e}")
+        tracker.record_error()
         return
 
     if not markets:
@@ -130,6 +139,7 @@ def run_scan(client: KalshiClient, detector: WhaleDetector):
         return
 
     total_whales = 0
+    total_trades = 0
 
     for market in markets:
         ticker = market.get("ticker", "")
@@ -145,6 +155,7 @@ def run_scan(client: KalshiClient, detector: WhaleDetector):
         if not trades:
             continue
 
+        total_trades += len(trades)
         alerts = detector.process_trades(ticker, trades, title)
 
         for alert in alerts:
@@ -157,6 +168,30 @@ def run_scan(client: KalshiClient, detector: WhaleDetector):
             trade_placed, copy_count, cost_cents = copy_trade(client, alert, balance_cents)
             send_whale_alert(alert, trade_placed, config.PAPER_TRADING, balance_cents)
             log_whale(alert, trade_placed, copy_count)
+
+            # Track in activity log
+            tracker.record_whale(
+                ticker=alert.market_ticker,
+                title=alert.market_title,
+                count=alert.trade_count,
+                side=alert.trade_side,
+                price_cents=alert.trade_price_cents,
+                multiplier=alert.multiplier,
+                confidence=alert.confidence_score,
+                trade_placed=trade_placed,
+                paper=config.PAPER_TRADING,
+            )
+
+    # Track near misses from the detector
+    for nm in detector.last_near_misses:
+        tracker.record_near_miss(
+            ticker=nm["ticker"], title=nm["title"], count=nm["count"],
+            rolling_avg=nm["rolling_avg"], multiplier=nm["multiplier"],
+        )
+    detector.last_near_misses.clear()
+
+    # Track cycle in activity log
+    tracker.record_cycle(markets_scanned=len(markets), trades_analyzed=total_trades)
 
     if total_whales == 0:
         print("  No whales this cycle")
@@ -198,7 +233,12 @@ def main():
     print("\n[INIT] Connecting to Kalshi API...")
     client = KalshiClient()
     detector = WhaleDetector()
+    tracker = ActivityTracker()
     init_csv_log()
+
+    # Wire up Telegram command handler with tracker and client
+    set_activity_tracker(tracker)
+    set_kalshi_client(client)
 
     # Test connection by fetching markets
     try:
@@ -209,9 +249,21 @@ def main():
         print(f"[FATAL] Failed to connect to Kalshi API: {e}")
         sys.exit(1)
 
+    # Record bot start
+    tracker.record_start()
+
     # Send startup Telegram message
     send_startup_message(config.PAPER_TRADING, market_count)
     print("[INIT] Startup message sent to Telegram")
+
+    # Start Telegram command listener (background thread)
+    start_command_listener()
+    print("[INIT] Telegram command listener started")
+
+    # Start morning report scheduler (background thread)
+    start_morning_report_scheduler(tracker)
+    print("[INIT] Morning report scheduler started (7 AM daily)")
+
     print("\n[RUNNING] Bot is now monitoring. Press Ctrl+C to stop.\n")
 
     # Main loop
@@ -222,12 +274,13 @@ def main():
         print(f"[Cycle {cycle}] {timestamp} — Scanning {config.MARKET_FILTER} markets...")
 
         try:
-            run_scan(client, detector)
+            run_scan(client, detector, tracker)
         except KeyboardInterrupt:
             raise
         except Exception as e:
             print(f"[ERROR] Scan cycle failed: {e}")
             send_error_message(f"Scan cycle {cycle} failed: {e}")
+            tracker.record_error()
 
         time.sleep(config.POLL_INTERVAL_SECONDS)
 
