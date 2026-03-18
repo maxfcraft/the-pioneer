@@ -126,7 +126,7 @@ class ActivityTracker:
 
         report = (
             f"{'='*30}\n"
-            f"BOT STATUS — {day.date}\n"
+            f"SITUATION REPORT — {day.date}\n"
             f"{'='*30}\n"
             f"\n"
             f"{uptime}"
@@ -169,14 +169,16 @@ class ActivityTracker:
 
         if not yesterday:
             return (
-                f"Good morning! No activity data from yesterday yet.\n"
-                f"Bot is {'running' if today.scan_cycles > 0 else 'not running'}."
+                f"Good morning, sir. No activity data from yesterday to report.\n"
+                f"Systems are {'online and operational' if today.scan_cycles > 0 else 'standing by'}."
             )
 
         d = yesterday
         report = (
+            f"Good morning, sir. Here's your daily briefing.\n"
+            f"\n"
             f"{'='*30}\n"
-            f"MORNING REPORT — {d.date}\n"
+            f"MORNING BRIEFING — {d.date}\n"
             f"{'='*30}\n"
             f"\n"
             f"Yesterday's Summary:\n"
@@ -213,8 +215,10 @@ class ActivityTracker:
         # Today so far
         report += (
             f"\nToday so far:\n"
-            f"  Bot is {'running' if today.scan_cycles > 0 else 'not running yet'}.\n"
+            f"  Systems {'online' if today.scan_cycles > 0 else 'powering up'}.\n"
             f"  Cycles: {today.scan_cycles} | Whales: {today.whales_detected}\n"
+            f"\n"
+            f"Standing by for your orders, sir."
         )
 
         return report

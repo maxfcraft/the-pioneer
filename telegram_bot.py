@@ -50,6 +50,8 @@ def send_whale_alert(alert: WhaleAlert, trade_placed: bool, paper_mode: bool,
     copy_cost_dollars = (copy_count * alert.trade_price_cents) / 100
 
     message = (
+        f"Sir, I've detected a whale.\n"
+        f"\n"
         f"{'='*30}\n"
         f"WHALE DETECTED {mode_tag}\n"
         f"{'='*30}\n"
@@ -67,9 +69,11 @@ def send_whale_alert(alert: WhaleAlert, trade_placed: bool, paper_mode: bool,
         f"Confidence: {alert.confidence_score}/100\n"
         f"\n"
         f"Your Balance: ${balance_dollars:,.2f}\n"
-        f"Your Trade: {copy_count} contracts @ {alert.trade_price_cents}c = ${copy_cost_dollars:,.2f} ({risk_pct}% of balance)\n"
+        f"Copy Trade: {copy_count} contracts @ {alert.trade_price_cents}c = ${copy_cost_dollars:,.2f} ({risk_pct}% of balance)\n"
         f"Status: {trade_status}\n"
-        f"{'='*30}"
+        f"{'='*30}\n"
+        f"\n"
+        f"Shall I continue monitoring, sir?"
     )
 
     return _send_message(message)
@@ -78,25 +82,32 @@ def send_whale_alert(alert: WhaleAlert, trade_placed: bool, paper_mode: bool,
 def send_startup_message(paper_mode: bool, market_count: int) -> bool:
     mode = "PAPER TRADING" if paper_mode else "LIVE TRADING"
     message = (
-        f"Kalshi Whale Bot Started\n"
+        f"Good day, sir. All systems are online.\n"
+        f"\n"
+        f"{'='*30}\n"
+        f"JARVIS WHALE DETECTION SYSTEM\n"
+        f"{'='*30}\n"
+        f"\n"
         f"Mode: {mode}\n"
         f"Monitoring: {market_count} weather markets\n"
         f"Threshold: {config.WHALE_THRESHOLD_MULTIPLIER}x average\n"
         f"Poll interval: {config.POLL_INTERVAL_SECONDS}s\n"
         f"Portfolio risk: {int(config.PORTFOLIO_RISK_FRACTION * 100)}% per trade\n"
         f"\n"
-        f"Commands you can send me:\n"
-        f"  /status — Quick status check\n"
-        f"  /today — Today's full report\n"
-        f"  /yesterday — Yesterday's summary\n"
-        f"  /balance — Your Kalshi balance\n"
-        f"  /help — All commands"
+        f"I'm at your service. Available commands:\n"
+        f"  /status  - Quick status check\n"
+        f"  /today   - Today's full report\n"
+        f"  /yesterday - Yesterday's summary\n"
+        f"  /balance - Your Kalshi balance\n"
+        f"  /help    - All commands\n"
+        f"\n"
+        f"I'll notify you the moment I spot a whale, sir."
     )
     return _send_message(message)
 
 
 def send_error_message(error: str) -> bool:
-    message = f"[ERROR] Kalshi Whale Bot\n\n{error}"
+    message = f"Sir, we have a problem.\n\n{error}\n\nI'm working to resolve it. Stand by."
     return _send_message(message)
 
 
@@ -127,8 +138,8 @@ def _handle_command(text: str) -> str:
 
     if cmd in ("/status", "status", "whats the update", "update"):
         if _activity_tracker:
-            reply = _activity_tracker.format_status_report()
-            # Add live balance if available
+            reply = "Sir, here's your current status.\n\n"
+            reply += _activity_tracker.format_status_report()
             if _kalshi_client:
                 try:
                     bal = _kalshi_client.get_balance()
@@ -136,48 +147,51 @@ def _handle_command(text: str) -> str:
                     reply += f"\nKalshi Balance: ${cents/100:.2f}\n"
                 except Exception:
                     reply += "\nKalshi Balance: (could not fetch)\n"
+            reply += "\nAll systems nominal, sir."
             return reply
-        return "Bot is running but no activity data yet."
+        return "Sir, the bot is running but I haven't collected any data yet. Stand by."
 
     elif cmd in ("/today", "today"):
         if _activity_tracker:
-            return _activity_tracker.format_status_report()
-        return "No activity data for today yet."
+            return "Sir, here's today's full briefing.\n\n" + _activity_tracker.format_status_report()
+        return "Sir, no activity data for today yet. I've just started up."
 
     elif cmd in ("/yesterday", "yesterday"):
         if _activity_tracker:
-            report = _activity_tracker.format_morning_report()
-            return report
-        return "No activity data available."
+            return "Sir, here's yesterday's debrief.\n\n" + _activity_tracker.format_morning_report()
+        return "Sir, I don't have any data from yesterday."
 
     elif cmd in ("/balance", "balance"):
         if _kalshi_client:
             try:
                 bal = _kalshi_client.get_balance()
                 cents = bal.get("balance", 0)
-                return f"Kalshi Balance: ${cents/100:.2f}"
+                return f"Sir, your current Kalshi balance is ${cents/100:.2f}."
             except Exception as e:
-                return f"Failed to fetch balance: {e}"
-        return "Kalshi client not initialized."
+                return f"Sir, I wasn't able to fetch your balance. Error: {e}"
+        return "Sir, the Kalshi client isn't initialized yet."
 
     elif cmd in ("/help", "help"):
         return (
-            "Available commands:\n"
-            "  /status — Quick status + today's stats + balance\n"
-            "  /today — Full report for today so far\n"
-            "  /yesterday — Yesterday's summary report\n"
-            "  /balance — Your current Kalshi balance\n"
-            "  /help — This message\n"
+            "At your service, sir. Here's what I can do:\n"
             "\n"
-            "You can also just type natural phrases like:\n"
+            "  /status     - Quick status + today's stats + balance\n"
+            "  /today      - Full report for today so far\n"
+            "  /yesterday  - Yesterday's summary report\n"
+            "  /balance    - Your current Kalshi balance\n"
+            "  /help       - This message\n"
+            "\n"
+            "You can also just say things like:\n"
             "  'whats the update'\n"
             "  'status'\n"
-            "  'balance'"
+            "  'balance'\n"
+            "\n"
+            "I'm always listening, sir."
         )
 
     else:
         return (
-            f"I don't understand '{text}'.\n"
+            f"Sir, I didn't quite catch that — '{text}'.\n"
             f"Try /status, /today, /yesterday, /balance, or /help."
         )
 
