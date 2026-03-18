@@ -1,11 +1,11 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(encoding="utf-8-sig")  # utf-8-sig strips Windows BOM automatically
 
 # --- Kalshi API ---
-KALSHI_API_KEY_ID = os.getenv("KALSHI_API_KEY_ID", "")
-KALSHI_RSA_PRIVATE_KEY_PATH = os.getenv("KALSHI_RSA_PRIVATE_KEY_PATH", "")
+KALSHI_API_KEY_ID = os.getenv("KALSHI_API_KEY_ID", "").strip()
+KALSHI_RSA_PRIVATE_KEY_PATH = os.getenv("KALSHI_RSA_PRIVATE_KEY_PATH", "").strip()
 KALSHI_BASE_URL = os.getenv("KALSHI_BASE_URL", "https://api.elections.kalshi.com/trade-api/v2")
 
 # --- Telegram ---
