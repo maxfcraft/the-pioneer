@@ -58,21 +58,28 @@ class KalshiClient:
         }
 
     def _request(self, method: str, path: str, params: dict = None, json_body: dict = None):
-        """Make an authenticated request to the Kalshi API."""
+        """Make an authenticated request to the Kalshi API with retry on rate-limit."""
         url = f"{self.base_url}{path}"
         # Kalshi requires signing the full path (e.g. /trade-api/v2/portfolio/balance)
         full_path = "/trade-api/v2" + path
-        headers = self._build_headers(method.upper(), full_path)
 
-        response = self.session.request(
-            method=method.upper(),
-            url=url,
-            headers=headers,
-            params=params,
-            json=json_body,
-        )
-        response.raise_for_status()
-        return response.json()
+        max_retries = 4
+        for attempt in range(max_retries + 1):
+            headers = self._build_headers(method.upper(), full_path)
+            response = self.session.request(
+                method=method.upper(),
+                url=url,
+                headers=headers,
+                params=params,
+                json=json_body,
+            )
+            if response.status_code == 429 and attempt < max_retries:
+                wait = 2 ** (attempt + 1)  # 2s, 4s, 8s, 16s
+                print(f"[RATE-LIMIT] 429 received, retrying in {wait}s (attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait)
+                continue
+            response.raise_for_status()
+            return response.json()
 
     # ---- Market Data ----
 
