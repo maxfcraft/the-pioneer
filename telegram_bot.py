@@ -140,7 +140,7 @@ def _handle_command(text: str) -> str:
         if _activity_tracker:
             reply = "Sir, here's your current status.\n\n"
             reply += _activity_tracker.format_status_report()
-            if _kalshi_client:
+            if _kalshi_client and _kalshi_client.authenticated:
                 try:
                     bal = _kalshi_client.get_balance()
                     cents = bal.get("balance", 0)
@@ -163,6 +163,8 @@ def _handle_command(text: str) -> str:
 
     elif cmd in ("/balance", "balance"):
         if _kalshi_client:
+            if not _kalshi_client.authenticated:
+                return "Sir, balance check requires a valid Kalshi API key. Currently running in public monitoring mode."
             try:
                 bal = _kalshi_client.get_balance()
                 cents = bal.get("balance", 0)

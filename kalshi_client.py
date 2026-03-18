@@ -1,15 +1,13 @@
 """
-Kalshi API client — handles authentication, market data, trade history, and order placement.
+Kalshi API client — handles market data, trade history, and (optionally) order placement.
 
-Kalshi v2 API uses RSA key signing: each request is signed with your private key
-and verified by Kalshi using the public key you registered.
+Public endpoints (markets, trades) work without authentication.
+Private endpoints (balance, orders) require RSA key signing.
 """
 
+import os
 import time
-import datetime
 import base64
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
 import requests
 
 import config
@@ -21,19 +19,29 @@ class KalshiClient:
     def __init__(self):
         self.base_url = config.KALSHI_BASE_URL
         self.api_key_id = config.KALSHI_API_KEY_ID
-        self.private_key = self._load_private_key()
+        self.private_key = None
+        self.authenticated = False
         self.session = requests.Session()
+
+        # Try to load auth — not required for market monitoring
+        if self.api_key_id and config.KALSHI_RSA_PRIVATE_KEY_PATH:
+            try:
+                self.private_key = self._load_private_key()
+                self.authenticated = True
+            except Exception as e:
+                print(f"[AUTH] Could not load private key: {e}")
+                print("[AUTH] Running in public-only mode (no balance/trading)")
 
     def _load_private_key(self):
         """Load RSA private key from the PEM file specified in config."""
+        from cryptography.hazmat.primitives import serialization
         with open(config.KALSHI_RSA_PRIVATE_KEY_PATH, "rb") as f:
             return serialization.load_pem_private_key(f.read(), password=None)
 
     def _sign_request(self, method: str, path: str, timestamp_ms: int) -> str:
-        """
-        Create the RSA signature for a Kalshi API request.
-        Signature covers: timestamp + method + path
-        """
+        """Create the RSA signature for a Kalshi API request."""
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import padding
         message = f"{timestamp_ms}{method}{path}"
         signature = self.private_key.sign(
             message.encode("utf-8"),
@@ -45,27 +53,29 @@ class KalshiClient:
         )
         return base64.b64encode(signature).decode("utf-8")
 
-    def _build_headers(self, method: str, path: str) -> dict:
-        """Build authenticated headers for a Kalshi API request."""
-        timestamp_ms = int(time.time() * 1000)
-        signature = self._sign_request(method, path, timestamp_ms)
-        return {
-            "KALSHI-ACCESS-KEY": self.api_key_id,
-            "KALSHI-ACCESS-SIGNATURE": signature,
-            "KALSHI-ACCESS-TIMESTAMP": str(timestamp_ms),
+    def _build_headers(self, method: str, path: str, auth: bool = False) -> dict:
+        """Build request headers. Adds auth signatures only when needed and available."""
+        headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
+        if auth and self.authenticated:
+            timestamp_ms = int(time.time() * 1000)
+            signature = self._sign_request(method, path, timestamp_ms)
+            headers["KALSHI-ACCESS-KEY"] = self.api_key_id
+            headers["KALSHI-ACCESS-SIGNATURE"] = signature
+            headers["KALSHI-ACCESS-TIMESTAMP"] = str(timestamp_ms)
+        return headers
 
-    def _request(self, method: str, path: str, params: dict = None, json_body: dict = None):
-        """Make an authenticated request to the Kalshi API with retry on rate-limit."""
+    def _request(self, method: str, path: str, params: dict = None,
+                 json_body: dict = None, auth: bool = False):
+        """Make a request to the Kalshi API with retry on rate-limit."""
         url = f"{self.base_url}{path}"
-        # Kalshi requires signing the full path (e.g. /trade-api/v2/portfolio/balance)
         full_path = "/trade-api/v2" + path
 
         max_retries = 4
         for attempt in range(max_retries + 1):
-            headers = self._build_headers(method.upper(), full_path)
+            headers = self._build_headers(method.upper(), full_path, auth=auth)
             response = self.session.request(
                 method=method.upper(),
                 url=url,
@@ -74,14 +84,14 @@ class KalshiClient:
                 json=json_body,
             )
             if response.status_code == 429 and attempt < max_retries:
-                wait = 2 ** (attempt + 1)  # 2s, 4s, 8s, 16s
+                wait = 2 ** (attempt + 1)
                 print(f"[RATE-LIMIT] 429 received, retrying in {wait}s (attempt {attempt + 1}/{max_retries})")
                 time.sleep(wait)
                 continue
             response.raise_for_status()
             return response.json()
 
-    # ---- Market Data ----
+    # ---- Market Data (public — no auth required) ----
 
     def get_events(self, status: str = "open", series_ticker: str = None,
                    cursor: str = None, limit: int = 100) -> dict:
@@ -108,21 +118,19 @@ class KalshiClient:
         return self._request("GET", f"/markets/{ticker}")
 
     def get_trades(self, ticker: str, cursor: str = None, limit: int = 100) -> dict:
-        """
-        Fetch recent trades for a specific market.
-        Returns a list of trade objects with price, count (number of contracts),
-        taker side (yes/no), and timestamp.
-        """
+        """Fetch recent trades for a specific market (public endpoint)."""
         params = {"ticker": ticker, "limit": limit}
         if cursor:
             params["cursor"] = cursor
         return self._request("GET", "/markets/trades", params=params)
 
-    # ---- Order Placement ----
+    # ---- Account (auth required) ----
 
     def get_balance(self) -> dict:
-        """Get account balance."""
-        return self._request("GET", "/portfolio/balance")
+        """Get account balance (requires valid API key)."""
+        if not self.authenticated:
+            return {"balance": 0}
+        return self._request("GET", "/portfolio/balance", auth=True)
 
     def place_order(self, ticker: str, side: str, count: int, price_cents: int,
                     order_type: str = "limit") -> dict:
@@ -146,7 +154,9 @@ class KalshiClient:
         if order_type == "limit":
             body["yes_price"] = price_cents if side == "yes" else (100 - price_cents)
 
-        return self._request("POST", "/portfolio/orders", json_body=body)
+        if not self.authenticated:
+            raise RuntimeError("Cannot place orders without valid API key authentication")
+        return self._request("POST", "/portfolio/orders", json_body=body, auth=True)
 
     # ---- Helper: Get Weather Markets ----
 

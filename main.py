@@ -118,14 +118,14 @@ def copy_trade(client: KalshiClient, alert: WhaleAlert, balance_cents: int) -> t
 
 def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTracker):
     """Run one full scan cycle across all weather markets."""
-    # Fetch balance once per scan cycle for position sizing
-    try:
-        balance_data = client.get_balance()
-        balance_cents = balance_data.get("balance", 0)
-        print(f"  Portfolio balance: ${balance_cents / 100:.2f}")
-    except Exception as e:
-        print(f"[ERROR] Failed to fetch balance: {e}")
-        balance_cents = 0
+    # Fetch balance once per scan cycle for position sizing (skip if no auth)
+    balance_cents = 0
+    if client.authenticated:
+        try:
+            balance_data = client.get_balance()
+            balance_cents = balance_data.get("balance", 0)
+        except Exception:
+            pass
 
     try:
         markets = client.get_weather_markets()
@@ -208,12 +208,8 @@ def main():
     print(f"  Market filter: {config.MARKET_FILTER}")
     print("=" * 50)
 
-    # Validate required config
+    # Validate required config — only Telegram is mandatory
     missing = []
-    if not config.KALSHI_API_KEY_ID:
-        missing.append("KALSHI_API_KEY_ID")
-    if not config.KALSHI_RSA_PRIVATE_KEY_PATH:
-        missing.append("KALSHI_RSA_PRIVATE_KEY_PATH")
     if not config.TELEGRAM_BOT_TOKEN:
         missing.append("TELEGRAM_BOT_TOKEN")
     if not config.TELEGRAM_CHAT_ID:
@@ -222,11 +218,6 @@ def main():
     if missing:
         print(f"\n[FATAL] Missing required config: {', '.join(missing)}")
         print("Fill in your .env file and try again.")
-        sys.exit(1)
-
-    if not os.path.exists(config.KALSHI_RSA_PRIVATE_KEY_PATH):
-        print(f"\n[FATAL] RSA private key file not found: {config.KALSHI_RSA_PRIVATE_KEY_PATH}")
-        print("Save your Kalshi private key to this path and try again.")
         sys.exit(1)
 
     # Initialize
@@ -240,23 +231,25 @@ def main():
     set_activity_tracker(tracker)
     set_kalshi_client(client)
 
-    # Test connection with a lightweight balance check first
-    try:
-        bal = client.get_balance()
-        print(f"[INIT] Connected to Kalshi — Balance: ${bal.get('balance', 0) / 100:.2f}")
-    except Exception as e:
-        print(f"[FATAL] Failed to connect to Kalshi API: {e}")
-        sys.exit(1)
+    if client.authenticated:
+        try:
+            bal = client.get_balance()
+            print(f"[INIT] Authenticated — Balance: ${bal.get('balance', 0) / 100:.2f}")
+        except Exception as e:
+            print(f"[WARNING] Auth failed: {e}")
+            print("[INIT] Continuing in public-only mode (whale alerts only, no copy trading)")
+            client.authenticated = False
+    else:
+        print("[INIT] No valid API key — running in public-only mode (whale alerts only)")
 
-    # Now fetch weather markets (with retry logic for rate limits)
+    # Fetch weather markets to verify API connection works
     try:
         markets = client.get_weather_markets()
         market_count = len(markets)
         print(f"[INIT] Found {market_count} weather markets")
     except Exception as e:
-        print(f"[WARNING] Could not fetch markets on startup: {e}")
-        print("[INIT] Will retry on first scan cycle...")
-        market_count = 0
+        print(f"[FATAL] Could not fetch markets from Kalshi: {e}")
+        sys.exit(1)
 
     # Record bot start
     tracker.record_start()
