@@ -17,7 +17,6 @@ load_dotenv()
 
 from data.db import init_db, get_stats
 from facebook.google_dorker import run_all_dorks
-from facebook.deep_group_finder import run_deep_facebook_scan
 from reddit.reddit_finder import run_reddit_scan
 from data.excel_exporter import export_to_excel
 
@@ -43,6 +42,7 @@ async def main():
         print("      Add them to run Phase 2 and find 10x more groups.")
     else:
         try:
+            from facebook.deep_group_finder import run_deep_facebook_scan
             fb_results = await run_deep_facebook_scan()
             if "error" in fb_results:
                 print(f"      Warning: {fb_results['error']}")
