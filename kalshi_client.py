@@ -162,35 +162,89 @@ class KalshiClient:
 
     # ---- Helper: Get Weather Markets ----
 
+    # Cache: avoid re-scanning all markets every 30 seconds
+    _weather_cache = []
+    _weather_cache_time = 0
+    _CACHE_TTL = 900  # refresh every 15 minutes
+
     def get_weather_markets(self) -> list:
         """
-        Fetch all open weather markets by querying each known series ticker directly.
-        Uses the API's series_ticker parameter for fast, targeted queries.
+        Fetch weather markets using a two-phase approach:
+        1. Try targeted series_ticker queries (fast if API supports it)
+        2. Fall back to scanning all markets with client-side prefix matching
+        Results are cached for 15 minutes to avoid excessive API calls.
         """
+        now = time.time()
+        if self._weather_cache and (now - self._weather_cache_time) < self._CACHE_TTL:
+            return self._weather_cache
+
+        # Phase 1: Try series_ticker queries (fast path)
+        markets = self._fetch_by_series()
+
+        # Phase 2: If series queries found nothing, scan all markets
+        if not markets:
+            print("  [DISCOVERY] Series queries returned 0 — scanning all markets...")
+            markets = self._fetch_all_and_filter()
+
+        self.__class__._weather_cache = markets
+        self.__class__._weather_cache_time = now
+
+        if markets:
+            tickers = [m.get("ticker", "") for m in markets[:5]]
+            preview = ", ".join(tickers)
+            if len(markets) > 5:
+                preview += f", ... (+{len(markets) - 5} more)"
+            print(f"  [DISCOVERY] Found {len(markets)} weather markets: {preview}")
+
+        return markets
+
+    def _fetch_by_series(self) -> list:
+        """Try fetching markets via series_ticker parameter."""
         all_markets = []
-        seen_tickers = set()
-
+        seen = set()
         for series in config.WEATHER_SERIES_TICKERS:
-            cursor = None
-            while True:
-                try:
-                    data = self.get_markets(series_ticker=series, cursor=cursor, limit=200)
-                except Exception as e:
-                    print(f"  [WARN] Could not fetch series {series}: {e}")
-                    break
-
-                markets = data.get("markets", [])
-                for m in markets:
-                    ticker = m.get("ticker", "")
-                    if ticker not in seen_tickers:
-                        seen_tickers.add(ticker)
+            try:
+                data = self.get_markets(series_ticker=series, limit=200)
+                for m in data.get("markets", []):
+                    t = m.get("ticker", "")
+                    if t not in seen:
+                        seen.add(t)
                         all_markets.append(m)
+            except Exception:
+                pass
+            time.sleep(0.2)
+        return all_markets
 
-                cursor = data.get("cursor")
-                if not cursor or not markets:
-                    break
-                time.sleep(0.3)
+    def _fetch_all_and_filter(self) -> list:
+        """Scan all open markets and filter by weather ticker prefixes."""
+        prefixes = ("KXHIGH", "KXTEMP", "KXHMONTH", "KXRAIN", "KXSNOW", "KXWIND", "KXWEATH")
+        all_markets = []
+        cursor = None
+        pages = 0
 
-            time.sleep(0.3)  # pace between series queries
+        while True:
+            try:
+                data = self.get_markets(cursor=cursor, limit=200)
+            except Exception as e:
+                print(f"  [DISCOVERY] API error on page {pages}: {e}")
+                break
 
+            markets = data.get("markets", [])
+            pages += 1
+
+            for m in markets:
+                ticker = m.get("ticker", "").upper()
+                if any(ticker.startswith(p) for p in prefixes):
+                    all_markets.append(m)
+
+            # Log progress every 10 pages
+            if pages % 10 == 0:
+                print(f"  [DISCOVERY] Scanned {pages} pages, found {len(all_markets)} weather markets so far...")
+
+            cursor = data.get("cursor")
+            if not cursor or not markets:
+                break
+            time.sleep(0.5)
+
+        print(f"  [DISCOVERY] Full scan complete: {pages} pages, {len(all_markets)} weather markets found")
         return all_markets

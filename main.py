@@ -311,10 +311,15 @@ def main():
         print("[INIT] No valid API key — running in public-only mode (whale alerts only)")
 
     # Fetch weather markets to verify API connection works
+    print("[INIT] Discovering weather markets (this may take a minute on first run)...")
     try:
         markets = client.get_weather_markets()
         market_count = len(markets)
-        print(f"[INIT] Found {market_count} weather markets")
+        if market_count == 0:
+            print("[WARNING] No weather markets found. The bot will keep trying every 15 minutes.")
+            print("[WARNING] This could mean Kalshi has no open weather markets right now.")
+        else:
+            print(f"[INIT] Locked onto {market_count} weather markets")
     except Exception as e:
         print(f"[FATAL] Could not fetch markets from Kalshi: {e}")
         sys.exit(1)
