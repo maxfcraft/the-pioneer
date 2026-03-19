@@ -103,12 +103,14 @@ class KalshiClient:
             params["cursor"] = cursor
         return self._request("GET", "/events", params=params)
 
-    def get_markets(self, event_ticker: str = None, status: str = "open",
-                    cursor: str = None, limit: int = 100) -> dict:
-        """Fetch markets, optionally filtered by event ticker."""
+    def get_markets(self, event_ticker: str = None, series_ticker: str = None,
+                    status: str = "open", cursor: str = None, limit: int = 100) -> dict:
+        """Fetch markets, optionally filtered by event or series ticker."""
         params = {"status": status, "limit": limit}
         if event_ticker:
             params["event_ticker"] = event_ticker
+        if series_ticker:
+            params["series_ticker"] = series_ticker
         if cursor:
             params["cursor"] = cursor
         return self._request("GET", "/markets", params=params)
@@ -162,24 +164,33 @@ class KalshiClient:
 
     def get_weather_markets(self) -> list:
         """
-        Fetch all open markets whose ticker matches any of the MARKET_FILTER patterns.
-        Supports comma-separated filters (e.g., "KXHIGH,KXRAIN,KXSNOW").
-        Paginates through all results.
+        Fetch all open weather markets by querying each known series ticker directly.
+        Uses the API's series_ticker parameter for fast, targeted queries.
         """
         all_markets = []
-        cursor = None
-        filters = [f.strip().upper() for f in config.MARKET_FILTER.split(",") if f.strip()]
+        seen_tickers = set()
 
-        while True:
-            data = self.get_markets(cursor=cursor, limit=200)
-            markets = data.get("markets", [])
-            for m in markets:
-                ticker_upper = m.get("ticker", "").upper()
-                if any(f in ticker_upper for f in filters):
-                    all_markets.append(m)
-            cursor = data.get("cursor")
-            if not cursor or not markets:
-                break
-            time.sleep(0.5)  # pace requests to avoid 429 rate limits
+        for series in config.WEATHER_SERIES_TICKERS:
+            cursor = None
+            while True:
+                try:
+                    data = self.get_markets(series_ticker=series, cursor=cursor, limit=200)
+                except Exception as e:
+                    print(f"  [WARN] Could not fetch series {series}: {e}")
+                    break
+
+                markets = data.get("markets", [])
+                for m in markets:
+                    ticker = m.get("ticker", "")
+                    if ticker not in seen_tickers:
+                        seen_tickers.add(ticker)
+                        all_markets.append(m)
+
+                cursor = data.get("cursor")
+                if not cursor or not markets:
+                    break
+                time.sleep(0.3)
+
+            time.sleep(0.3)  # pace between series queries
 
         return all_markets

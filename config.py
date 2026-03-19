@@ -34,12 +34,26 @@ PAPER_TRADING = os.getenv("PAPER_TRADING", "true").lower() == "true"
 TRADE_LOG_FILE = os.getenv("TRADE_LOG_FILE", "whale_trades.csv")
 
 # --- Market Filter ---
-# Comma-separated list of ticker substrings to match (case-insensitive)
-# Kalshi weather tickers: KXHIGH (daily temps), KXHMONTHRANGE (monthly),
-# KXRAIN, KXSNOW, KXWIND, etc.
+# Comma-separated series tickers to monitor on Kalshi.
+# These are queried directly via the API's series_ticker parameter.
+# Known weather series: KXHIGHNY, KXHIGHCHI, KXHIGHMIA, KXHIGHAUS (daily temps),
+# KXHMONTHRANGE (monthly range)
+WEATHER_SERIES_TICKERS = [
+    s.strip() for s in
+    os.getenv("WEATHER_SERIES", "KXHIGHNY,KXHIGHCHI,KXHIGHMIA,KXHIGHAUS,KXHMONTHRANGE").split(",")
+    if s.strip()
+]
+
+# Legacy filter for any additional ticker substring matching (optional)
 MARKET_FILTER = os.getenv("MARKET_FILTER", "KXHIGH,KXHMONTHRANGE,KXRAIN,KXSNOW,KXWIND")
 
-# --- Morning Report ---
-MORNING_REPORT_HOUR = int(os.getenv("MORNING_REPORT_HOUR", "7"))
+# --- Report Schedule (Central Time) ---
+# Morning briefing: 8:00 AM Central
+MORNING_REPORT_HOUR = int(os.getenv("MORNING_REPORT_HOUR", "8"))
 MORNING_REPORT_MINUTE = int(os.getenv("MORNING_REPORT_MINUTE", "0"))
-MORNING_REPORT_UTC_OFFSET = int(os.getenv("MORNING_REPORT_UTC_OFFSET", "-4"))
+# Central Daylight Time = UTC-5 (March-November), CST = UTC-6
+MORNING_REPORT_UTC_OFFSET = int(os.getenv("MORNING_REPORT_UTC_OFFSET", "-5"))
+
+# Evening recap: 8:00 PM Central
+EVENING_RECAP_HOUR = int(os.getenv("EVENING_RECAP_HOUR", "20"))
+EVENING_RECAP_MINUTE = int(os.getenv("EVENING_RECAP_MINUTE", "0"))

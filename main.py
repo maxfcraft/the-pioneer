@@ -214,12 +214,12 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
 
 
 def _eod_recap_loop(client: KalshiClient, paper_tracker: PaperTradeTracker):
-    """Background thread: sends end-of-day paper trade recap at 9 PM Eastern."""
-    recap_hour = 21  # 9 PM
-    utc_offset = config.MORNING_REPORT_UTC_OFFSET  # -4 for EDT
+    """Background thread: sends end-of-day paper trade recap at 8 PM Central."""
+    recap_hour = config.EVENING_RECAP_HOUR  # 20 = 8 PM
+    utc_offset = config.MORNING_REPORT_UTC_OFFSET  # -5 for CDT
     recap_utc_hour = (recap_hour - utc_offset) % 24
 
-    print(f"[EOD RECAP] Scheduler started — recaps at {recap_hour}:00 (UTC{utc_offset:+d})")
+    print(f"[EOD RECAP] Scheduler started — recaps at {recap_hour % 12 or 12}:00 PM (UTC{utc_offset:+d})")
 
     while True:
         now = datetime.now(timezone.utc)
@@ -273,7 +273,7 @@ def main():
     print(f"  Threshold: {config.WHALE_THRESHOLD_MULTIPLIER}x average")
     print(f"  Portfolio risk: {int(config.PORTFOLIO_RISK_FRACTION * 100)}% per trade")
     print(f"  Poll interval: {config.POLL_INTERVAL_SECONDS}s")
-    print(f"  Market filter: {config.MARKET_FILTER}")
+    print(f"  Weather series: {', '.join(config.WEATHER_SERIES_TICKERS)}")
     print("=" * 50)
 
     # Validate required config — only Telegram is mandatory
@@ -339,11 +339,11 @@ def main():
 
     # Start morning report scheduler (background thread)
     start_morning_report_scheduler(tracker)
-    print("[INIT] Morning report scheduler started (7 AM daily)")
+    print("[INIT] Morning report scheduler started (8 AM Central daily)")
 
     # Start end-of-day recap scheduler (background thread)
     start_eod_recap_scheduler(client, paper_tracker)
-    print("[INIT] End-of-day recap scheduler started (9 PM daily)")
+    print("[INIT] End-of-day recap scheduler started (8 PM Central daily)")
 
     print("\n[RUNNING] Bot is now monitoring. Press Ctrl+C to stop.\n")
 
