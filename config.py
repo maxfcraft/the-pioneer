@@ -36,16 +36,22 @@ TRADE_LOG_FILE = os.getenv("TRADE_LOG_FILE", "whale_trades.csv")
 # --- Market Filter ---
 # Comma-separated series tickers to monitor on Kalshi.
 # These are queried directly via the API's series_ticker parameter.
-# Known weather series: KXHIGHNY, KXHIGHCHI, KXHIGHMIA, KXHIGHAUS (daily temps),
-# KXHMONTHRANGE (monthly range)
+# Daily high temps (4 cities):
+#   KXHIGHNY (NYC), KXHIGHCHI (Chicago), KXHIGHMIA (Miami), KXHIGHAUS (Austin)
+# Precipitation & storms:
+#   KXRAIN (rainfall), KXSNOW (snowfall), KXWIND (wind)
+# Broader weather:
+#   KXTEMP (temperature), KXWEATH (general weather), KXHMONTHRANGE (monthly range)
 WEATHER_SERIES_TICKERS = [
     s.strip() for s in
-    os.getenv("WEATHER_SERIES", "KXHIGHNY,KXHIGHCHI,KXHIGHMIA,KXHIGHAUS,KXHMONTHRANGE").split(",")
+    os.getenv(
+        "WEATHER_SERIES",
+        "KXHIGHNY,KXHIGHCHI,KXHIGHMIA,KXHIGHAUS,"
+        "KXTEMP,KXHMONTHRANGE,"
+        "KXRAIN,KXSNOW,KXWIND,KXWEATH"
+    ).split(",")
     if s.strip()
 ]
-
-# Legacy filter for any additional ticker substring matching (optional)
-MARKET_FILTER = os.getenv("MARKET_FILTER", "KXHIGH,KXHMONTHRANGE,KXRAIN,KXSNOW,KXWIND")
 
 # --- Report Schedule (Central Time) ---
 # Morning briefing: 8:00 AM Central
