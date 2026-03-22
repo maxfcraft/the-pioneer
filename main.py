@@ -235,23 +235,20 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
                 paper=config.PAPER_TRADING,
             )
 
-    # Send near-miss alerts (only for significant ones: 7x+ avg)
+    # Track near-miss data (log only — no Telegram spam)
     near_miss_count = len(detector.last_near_misses)
     for nm in detector.last_near_misses:
         tracker.record_near_miss(
             ticker=nm["ticker"], title=nm["title"], count=nm["count"],
             rolling_avg=nm["rolling_avg"], multiplier=nm["multiplier"],
         )
-        # Only alert on strong near misses (70%+ of whale threshold)
         if nm["multiplier"] >= config.WHALE_THRESHOLD_MULTIPLIER * 0.7:
-            send_near_miss_alert(nm)
-            print(f"  NEAR MISS ALERT: {nm['ticker']} — {nm['count']} contracts ({nm['multiplier']:.1f}x avg)")
+            print(f"  NEAR MISS (logged): {nm['ticker']} — {nm['count']} contracts ({nm['multiplier']:.1f}x avg)")
     detector.last_near_misses.clear()
 
-    # Send volume spike alerts
+    # Track volume spikes (log only — no Telegram spam)
     for spike in detector.last_volume_spikes:
-        send_volume_spike_alert(spike)
-        print(f"  VOLUME SPIKE: {spike.market_ticker} — {spike.new_trade_count} trades ({spike.spike_multiplier}x normal)")
+        print(f"  VOLUME SPIKE (logged): {spike.market_ticker} — {spike.new_trade_count} trades ({spike.spike_multiplier}x normal)")
     detector.last_volume_spikes.clear()
 
     # Update hourly market count
