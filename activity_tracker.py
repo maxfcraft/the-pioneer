@@ -162,6 +162,21 @@ class ActivityTracker:
 
         return report
 
+    @staticmethod
+    def _city_from_ticker(ticker: str) -> str:
+        """Extract a readable city name from a Kalshi weather ticker."""
+        city_map = {
+            "KXHIGHNY": "NYC",
+            "KXHIGHCHI": "Chicago",
+            "KXHIGHMIA": "Miami",
+            "KXHIGHAUS": "Austin",
+        }
+        for prefix, name in city_map.items():
+            if ticker.startswith(prefix):
+                return name
+        # Fallback: strip KX prefix and return raw
+        return ticker.split("-")[0].replace("KX", "")
+
     def format_morning_report(self) -> str:
         """Generate the 7 AM morning summary for yesterday's activity."""
         yesterday = self.get_yesterday()
@@ -174,51 +189,109 @@ class ActivityTracker:
             )
 
         d = yesterday
+
+        # --- City-level analysis ---
+        city_whales: dict[str, list] = {}
+        city_near_misses: dict[str, int] = {}
+        city_total_contracts: dict[str, int] = {}
+
+        for w in d.whale_alerts:
+            city = self._city_from_ticker(w["ticker"])
+            city_whales.setdefault(city, []).append(w)
+            city_total_contracts[city] = city_total_contracts.get(city, 0) + w["count"]
+
+        for nm in d.near_misses:
+            city = self._city_from_ticker(nm["ticker"])
+            city_near_misses[city] = city_near_misses.get(city, 0) + 1
+            city_total_contracts[city] = city_total_contracts.get(city, 0) + nm["count"]
+
+        # Find hottest city (most total whale + near-miss contract volume)
+        hottest_city = max(city_total_contracts, key=city_total_contracts.get) if city_total_contracts else None
+
         report = (
-            f"Good morning, Master Bruce. Here's your daily briefing.\n"
+            f"Good morning, Master Bruce.\n"
             f"\n"
             f"{'='*30}\n"
             f"MORNING BRIEFING — {d.date}\n"
             f"{'='*30}\n"
-            f"\n"
-            f"Yesterday's Summary:\n"
-            f"  Scan cycles completed: {d.scan_cycles}\n"
-            f"  Markets monitored: {d.markets_scanned}\n"
-            f"  Total trades analyzed: {d.total_trades_analyzed}\n"
-            f"\n"
-            f"  Whales detected: {d.whales_detected}\n"
-            f"  Copy trades (paper): {d.copy_trades_paper}\n"
-            f"  Copy trades (live): {d.copy_trades_placed}\n"
-            f"  Errors: {d.errors}\n"
         )
 
+        # --- Headline stats ---
+        report += (
+            f"\n"
+            f"Whales: {d.whales_detected} | "
+            f"Near misses: {len(d.near_misses)} | "
+            f"Errors: {d.errors}\n"
+        )
+
+        if hottest_city:
+            whale_count = len(city_whales.get(hottest_city, []))
+            nm_count = city_near_misses.get(hottest_city, 0)
+            contracts = city_total_contracts[hottest_city]
+            report += (
+                f"\nHottest city: {hottest_city}\n"
+                f"  {whale_count} whales, {nm_count} near misses, "
+                f"{contracts} total contracts\n"
+            )
+
+        # --- City breakdown ---
+        if city_total_contracts:
+            report += f"\nCity Breakdown:\n"
+            for city in sorted(city_total_contracts, key=city_total_contracts.get, reverse=True):
+                wcount = len(city_whales.get(city, []))
+                nmcount = city_near_misses.get(city, 0)
+                report += f"  {city}: {wcount} whales, {nmcount} near misses\n"
+
+        # --- Whale details ---
         if d.whale_alerts:
-            report += f"\nWhale Breakdown:\n"
+            report += f"\nWhale Trades:\n"
             for w in d.whale_alerts:
-                placed = "TRADED" if w['trade_placed'] else "alert only"
+                city = self._city_from_ticker(w["ticker"])
+                cost = w["count"] * w["price_cents"] / 100
+                placed = "PAPER TRADE" if w.get("trade_placed") else "alert only"
                 report += (
-                    f"  {w['time']} | {w['ticker']}\n"
-                    f"    {w['count']} contracts {w['side'].upper()} @ {w['price_cents']}c\n"
-                    f"    {w['multiplier']}x avg | confidence {w['confidence']} | {placed}\n"
+                    f"  [{city}] {w['count']} contracts "
+                    f"{w['side'].upper()} @ {w['price_cents']}c "
+                    f"(${cost:.2f})\n"
+                    f"    {w['multiplier']}x avg | conf {w['confidence']:.0f} | {placed}\n"
                 )
         else:
-            report += "\n  No whales detected yesterday.\n"
+            report += "\nNo whales detected yesterday. Quiet seas.\n"
 
-        if d.near_misses:
-            report += f"\nClosest Calls (almost triggered):\n"
-            for nm in d.near_misses[-5:]:
+        # --- Strategy notes ---
+        report += f"\nStrategy Notes:\n"
+        if d.whale_alerts:
+            # Confidence breakdown
+            high_conf = [w for w in d.whale_alerts if w["confidence"] >= 60]
+            low_conf = [w for w in d.whale_alerts if w["confidence"] < 60]
+            if high_conf and low_conf:
                 report += (
-                    f"  {nm['ticker']} — {nm['count']} contracts "
-                    f"({nm['multiplier']}x vs {config_threshold()}x threshold)\n"
+                    f"  {len(high_conf)} high-confidence (60+) vs "
+                    f"{len(low_conf)} low-confidence trades.\n"
                 )
+            # Average multiplier
+            avg_mult = sum(w["multiplier"] for w in d.whale_alerts) / len(d.whale_alerts)
+            report += f"  Average whale size: {avg_mult:.1f}x the rolling average.\n"
+            # Biggest whale
+            biggest = max(d.whale_alerts, key=lambda w: w["count"])
+            report += (
+                f"  Biggest whale: {biggest['count']} contracts in "
+                f"{self._city_from_ticker(biggest['ticker'])} "
+                f"({biggest['multiplier']}x avg).\n"
+            )
+        else:
+            report += "  No whale data to analyze. Consider lowering threshold if this persists.\n"
 
-        # Today so far
+        if len(d.near_misses) >= 5:
+            report += (
+                f"  {len(d.near_misses)} near misses — heavy positioning happening "
+                f"just below threshold. Watch for follow-through today.\n"
+            )
+
+        # --- Today so far ---
         report += (
-            f"\nToday so far:\n"
-            f"  Systems {'online' if today.scan_cycles > 0 else 'powering up'}.\n"
-            f"  Cycles: {today.scan_cycles} | Whales: {today.whales_detected}\n"
-            f"\n"
-            f"I shall be here if you need me, Master Bruce."
+            f"\nSystems {'online' if today.scan_cycles > 0 else 'powering up'}. "
+            f"Standing by, Master Bruce."
         )
 
         return report

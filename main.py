@@ -272,6 +272,84 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
         print("  No whales this cycle")
 
 
+def _city_from_ticker(ticker: str) -> str:
+    """Extract a readable city name from a Kalshi weather ticker."""
+    city_map = {
+        "KXHIGHNY": "NYC",
+        "KXHIGHCHI": "Chicago",
+        "KXHIGHMIA": "Miami",
+        "KXHIGHAUS": "Austin",
+    }
+    for prefix, name in city_map.items():
+        if ticker.startswith(prefix):
+            return name
+    return ticker.split("-")[0].replace("KX", "")
+
+
+def _build_scoreboard(trades: list) -> str:
+    """Build a 7-day running scoreboard from paper trades."""
+    total_pnl = sum(t.pnl_cents for t in trades)
+    total_cost = sum(t.cost_cents for t in trades) or 1
+    winners = [t for t in trades if t.pnl_cents > 0]
+    losers = [t for t in trades if t.pnl_cents < 0]
+    settled = [t for t in trades if t.resolved]
+    open_trades = [t for t in trades if not t.resolved]
+
+    win_rate = (len(winners) / len(settled) * 100) if settled else 0
+    roi = (total_pnl / total_cost) * 100
+
+    lines = [
+        f"{'='*30}",
+        f"7-DAY SCOREBOARD",
+        f"{'='*30}",
+        f"",
+        f"Total trades: {len(trades)} ({len(settled)} settled, {len(open_trades)} open)",
+        f"Record: {len(winners)}W / {len(losers)}L",
+        f"Win rate: {win_rate:.0f}%",
+        f"Net P&L: ${total_pnl/100:+.2f} ({roi:+.1f}% ROI)",
+    ]
+
+    # Best and worst trade
+    if settled:
+        best = max(settled, key=lambda t: t.pnl_cents)
+        worst = min(settled, key=lambda t: t.pnl_cents)
+        lines.append(f"")
+        lines.append(f"Best trade: ${best.pnl_cents/100:+.2f} — {_city_from_ticker(best.market_ticker)}")
+        lines.append(f"  {best.market_title}")
+        lines.append(f"Worst trade: ${worst.pnl_cents/100:+.2f} — {_city_from_ticker(worst.market_ticker)}")
+        lines.append(f"  {worst.market_title}")
+
+    # City P&L breakdown
+    city_pnl: dict[str, int] = {}
+    city_count: dict[str, int] = {}
+    for t in trades:
+        city = _city_from_ticker(t.market_ticker)
+        city_pnl[city] = city_pnl.get(city, 0) + t.pnl_cents
+        city_count[city] = city_count.get(city, 0) + 1
+
+    if city_pnl:
+        lines.append(f"")
+        lines.append(f"P&L by City:")
+        for city in sorted(city_pnl, key=city_pnl.get, reverse=True):
+            lines.append(f"  {city}: ${city_pnl[city]/100:+.2f} ({city_count[city]} trades)")
+
+    # Confidence analysis
+    high_conf = [t for t in settled if t.confidence >= 60]
+    low_conf = [t for t in settled if t.confidence < 60]
+    if high_conf and low_conf:
+        hc_wins = sum(1 for t in high_conf if t.pnl_cents > 0)
+        lc_wins = sum(1 for t in low_conf if t.pnl_cents > 0)
+        hc_rate = (hc_wins / len(high_conf) * 100) if high_conf else 0
+        lc_rate = (lc_wins / len(low_conf) * 100) if low_conf else 0
+        lines.append(f"")
+        lines.append(f"Confidence Breakdown:")
+        lines.append(f"  High conf (60+): {hc_rate:.0f}% win rate ({len(high_conf)} trades)")
+        lines.append(f"  Low conf (<60): {lc_rate:.0f}% win rate ({len(low_conf)} trades)")
+
+    lines.append(f"{'='*30}")
+    return "\n".join(lines)
+
+
 def _eod_recap_loop(client: KalshiClient, paper_tracker: PaperTradeTracker):
     """Background thread: sends end-of-day paper trade recap at 8 PM Central."""
     recap_hour = config.EVENING_RECAP_HOUR  # 20 = 8 PM
@@ -296,21 +374,38 @@ def _eod_recap_loop(client: KalshiClient, paper_tracker: PaperTradeTracker):
                 break
             time.sleep(min(remaining, 60))
 
-        # Check outcomes for today's paper trades
+        # Check outcomes for today's paper trades + build smart recap
         try:
             paper_tracker.check_outcomes(client)
             today_trades = paper_tracker.get_today_trades()
+            recent_trades = paper_tracker.get_recent_trades(days=7)
+
             if today_trades:
                 recap = paper_tracker.format_recap(today_trades)
-                msg = f"Good evening, Master Bruce. Here's how today's whale trades performed.\n\n{recap}"
+
+                # Add 7-day running scoreboard
+                if len(recent_trades) > len(today_trades):
+                    scoreboard = _build_scoreboard(recent_trades)
+                    recap += f"\n{scoreboard}"
+
+                msg = f"Good evening, Master Bruce.\n\n{recap}"
                 _send_message(msg)
                 print(f"[EOD RECAP] Sent recap for {len(today_trades)} paper trades")
             else:
-                _send_message(
-                    "Good evening, Master Bruce. No whale trades detected today. "
-                    "The markets were quiet. Even Gotham has its calm nights. I'll keep watch."
-                )
-                print("[EOD RECAP] No trades today, sent quiet day message")
+                # Even on quiet days, show the running scoreboard if we have data
+                if recent_trades:
+                    scoreboard = _build_scoreboard(recent_trades)
+                    msg = (
+                        f"Good evening, Master Bruce. No whales today.\n\n"
+                        f"But here's where we stand this week:\n\n{scoreboard}"
+                    )
+                else:
+                    msg = (
+                        "Good evening, Master Bruce. No whale trades this week. "
+                        "The markets have been quiet. I remain at my post."
+                    )
+                _send_message(msg)
+                print("[EOD RECAP] No trades today, sent scoreboard")
         except Exception as e:
             print(f"[EOD RECAP ERROR] {e}")
 
@@ -449,9 +544,10 @@ def main():
     start_eod_recap_scheduler(client, paper_tracker)
     print("[INIT] End-of-day recap scheduler started (8 PM Central daily)")
 
-    # Start hourly briefing scheduler (background thread)
-    start_hourly_briefing_scheduler(detector)
-    print("[INIT] Hourly briefing scheduler started (every 60 min, 24/7)")
+    # Hourly briefing disabled — too much noise. Whales-only via real-time alerts,
+    # plus morning/evening reports for the full picture.
+    # start_hourly_briefing_scheduler(detector)
+    print("[INIT] Hourly briefing DISABLED (whales-only mode)")
 
     print("\n[RUNNING] Bot is now monitoring. Press Ctrl+C to stop.\n")
 
