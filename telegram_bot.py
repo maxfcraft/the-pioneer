@@ -22,6 +22,7 @@ from whale_detector import WhaleAlert
 _activity_tracker = None
 _kalshi_client = None
 _paper_tracker = None
+_whale_detector = None
 
 
 def set_activity_tracker(tracker):
@@ -37,6 +38,11 @@ def set_kalshi_client(client):
 def set_paper_tracker(tracker):
     global _paper_tracker
     _paper_tracker = tracker
+
+
+def set_whale_detector(detector):
+    global _whale_detector
+    _whale_detector = detector
 
 
 # ── Outbound messages ────────────────────────────────────────────
@@ -197,6 +203,46 @@ def _handle_command(text: str) -> str:
                 return f"Sir, I wasn't able to fetch your balance. Error: {e}"
         return "Sir, the Kalshi client isn't initialized yet."
 
+    elif cmd in ("/datacheck", "datacheck"):
+        if _whale_detector and _whale_detector.trade_history:
+            lines = ["Sir, here's the live data health check.\n"]
+            lines.append(f"Markets with data: {len(_whale_detector.trade_history)}")
+            total_entries = sum(len(h) for h in _whale_detector.trade_history.values())
+            lines.append(f"Total trade entries in memory: {total_entries}\n")
+
+            # Show top 5 markets by average trade size
+            market_avgs = []
+            for ticker, history in _whale_detector.trade_history.items():
+                if history:
+                    avg = sum(history) / len(history)
+                    max_trade = max(history)
+                    market_avgs.append((ticker, avg, max_trade, len(history)))
+            market_avgs.sort(key=lambda x: x[1], reverse=True)
+
+            lines.append("Top 5 markets by avg trade size:")
+            for ticker, avg, max_t, count in market_avgs[:5]:
+                threshold = avg * config.WHALE_THRESHOLD_MULTIPLIER
+                lines.append(f"  {ticker[-20:]}")
+                lines.append(f"    Avg: {avg:.1f} | Max: {max_t} | Whale threshold: {threshold:.0f}")
+                lines.append(f"    History: {count} trades")
+
+            # Near miss summary
+            nm_count = len(_whale_detector.last_near_misses)
+            lines.append(f"\nNear misses (5-10x): {nm_count}")
+            if _whale_detector.last_near_misses:
+                for nm in _whale_detector.last_near_misses[-3:]:
+                    lines.append(f"  {nm['ticker'][-20:]}: {nm['count']} contracts ({nm['multiplier']:.1f}x)")
+
+            # Data flowing check
+            zero_markets = sum(1 for h in _whale_detector.trade_history.values() if h and max(h) == 0)
+            if zero_markets > 0:
+                lines.append(f"\nWARNING: {zero_markets} markets have all-zero data (API bug)")
+            else:
+                lines.append("\nData flow: HEALTHY - real trade sizes detected")
+
+            return "\n".join(lines)
+        return "Sir, no trade data in memory yet. The detector needs a few scan cycles to build up history."
+
     elif cmd in ("/help", "help"):
         return (
             "At your service, sir. Here's what I can do:\n"
@@ -206,6 +252,7 @@ def _handle_command(text: str) -> str:
             "  /yesterday  - Yesterday's summary report\n"
             "  /recap      - Paper trade P&L recap\n"
             "  /balance    - Your Kalshi balance\n"
+            "  /datacheck  - Live data health + trade sizes\n"
             "  /help       - This message\n"
             "\n"
             "You'll also get:\n"

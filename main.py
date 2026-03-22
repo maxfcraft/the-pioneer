@@ -28,7 +28,7 @@ from activity_tracker import ActivityTracker
 from paper_tracker import PaperTradeTracker
 from telegram_bot import (
     send_whale_alert, send_startup_message, send_error_message,
-    set_activity_tracker, set_kalshi_client, set_paper_tracker,
+    set_activity_tracker, set_kalshi_client, set_paper_tracker, set_whale_detector,
     start_command_listener, _send_message,
 )
 from morning_report import start_morning_report_scheduler
@@ -209,6 +209,18 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
     # Track cycle in activity log
     tracker.record_cycle(markets_scanned=len(markets), trades_analyzed=total_trades)
 
+    # Diagnostic: show real data is flowing through the detector
+    near_miss_count = len(detector.last_near_misses)
+    sample_avgs = []
+    for t, history in list(detector.trade_history.items())[:3]:
+        if history:
+            avg = sum(history) / len(history)
+            sample_avgs.append(f"{t[-12:]}: avg={avg:.1f} ({len(history)} trades)")
+    if sample_avgs:
+        print(f"  Data check: {total_trades} trades | {near_miss_count} near-misses | {', '.join(sample_avgs)}")
+    else:
+        print(f"  Data check: {total_trades} trades analyzed")
+
     if total_whales == 0:
         print("  No whales this cycle")
 
@@ -298,6 +310,7 @@ def main():
     # Wire up Telegram command handler with tracker and client
     set_activity_tracker(tracker)
     set_kalshi_client(client)
+    set_whale_detector(detector)
 
     if client.authenticated:
         try:
