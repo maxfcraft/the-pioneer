@@ -169,13 +169,13 @@ class ActivityTracker:
 
         if not yesterday:
             return (
-                f"Good morning, sir. No activity data from yesterday to report.\n"
+                f"Good morning, Master Wayne. No activity data from yesterday to report.\n"
                 f"Systems are {'online and operational' if today.scan_cycles > 0 else 'standing by'}."
             )
 
         d = yesterday
         report = (
-            f"Good morning, sir. Here's your daily briefing.\n"
+            f"Good morning, Master Wayne. Here's your daily briefing.\n"
             f"\n"
             f"{'='*30}\n"
             f"MORNING BRIEFING — {d.date}\n"
@@ -218,7 +218,7 @@ class ActivityTracker:
             f"  Systems {'online' if today.scan_cycles > 0 else 'powering up'}.\n"
             f"  Cycles: {today.scan_cycles} | Whales: {today.whales_detected}\n"
             f"\n"
-            f"Standing by for your orders, sir."
+            f"I shall be here if you need me, Master Wayne."
         )
 
         return report

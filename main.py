@@ -269,13 +269,13 @@ def _eod_recap_loop(client: KalshiClient, paper_tracker: PaperTradeTracker):
             today_trades = paper_tracker.get_today_trades()
             if today_trades:
                 recap = paper_tracker.format_recap(today_trades)
-                msg = f"Good evening, sir. Here's how today's whale trades performed.\n\n{recap}"
+                msg = f"Good evening, Master Wayne. Here's how today's whale trades performed.\n\n{recap}"
                 _send_message(msg)
                 print(f"[EOD RECAP] Sent recap for {len(today_trades)} paper trades")
             else:
                 _send_message(
-                    "Good evening, sir. No whale trades detected today. "
-                    "Markets were quiet. I'll keep watching."
+                    "Good evening, Master Wayne. No whale trades detected today. "
+                    "The markets were quiet. Even Gotham has its calm nights. I'll keep watch."
                 )
                 print("[EOD RECAP] No trades today, sent quiet day message")
         except Exception as e:
@@ -292,11 +292,21 @@ def start_eod_recap_scheduler(client: KalshiClient, paper_tracker: PaperTradeTra
 
 
 def _hourly_briefing_loop(detector):
-    """Background thread: sends hourly Jarvis briefing to Telegram."""
-    print("[HOURLY] Briefing scheduler started — updates every 60 minutes, 24/7")
+    """Background thread: sends hourly Alfred briefing to Telegram (quiet 8PM-7AM Central)."""
+    utc_offset = config.MORNING_REPORT_UTC_OFFSET  # -5 for CDT
+    print("[HOURLY] Briefing scheduler started — updates every 60 min (quiet 8PM-7AM Central)")
 
     while True:
         time.sleep(3600)  # Wait one hour
+
+        # Check if we're in quiet hours (8 PM - 7 AM Central)
+        now_utc = datetime.now(timezone.utc)
+        central_hour = (now_utc.hour + utc_offset) % 24
+        if central_hour >= 20 or central_hour < 7:
+            # Still reset stats so the next active-hour briefing starts fresh
+            detector.reset_hourly_stats()
+            print(f"[HOURLY] Quiet hours ({central_hour}:00 Central) — skipping briefing")
+            continue
 
         try:
             stats = detector.hourly_stats.copy()
@@ -323,7 +333,7 @@ def start_hourly_briefing_scheduler(detector):
 def main():
     """Main entry point — initialize and run the bot loop."""
     print("=" * 50)
-    print("  KALSHI WEATHER WHALE BOT")
+    print("  ALFRED — KALSHI WHALE DETECTION SYSTEM")
     print(f"  Mode: {'PAPER TRADING' if config.PAPER_TRADING else 'LIVE TRADING'}")
     print(f"  Threshold: {config.WHALE_THRESHOLD_MULTIPLIER}x average")
     print(f"  Portfolio risk: {int(config.PORTFOLIO_RISK_FRACTION * 100)}% per trade")
