@@ -29,6 +29,7 @@ from paper_tracker import PaperTradeTracker
 from telegram_bot import (
     send_whale_alert, send_startup_message, send_error_message,
     send_near_miss_alert, send_volume_spike_alert, send_hourly_briefing,
+    send_trade_followup,
     set_activity_tracker, set_kalshi_client, set_paper_tracker, set_whale_detector,
     start_command_listener, _send_message,
 )
@@ -76,6 +77,32 @@ def log_whale(alert: WhaleAlert, trade_placed: bool, copy_count: int):
             copy_count,
             config.PAPER_TRADING,
         ])
+
+
+def _trade_followup(client: KalshiClient, paper_tracker: PaperTradeTracker, trade_index: int, entry_price: int):
+    """Called 1 hour after a paper trade to check how it's doing."""
+    try:
+        trade = paper_tracker.trades[trade_index]
+        updated = paper_tracker.check_single_trade(trade, client)
+        if updated:
+            send_trade_followup(updated, entry_price)
+            print(f"[FOLLOWUP] Sent 1-hour check for {trade.codename}: {trade.market_ticker}")
+        else:
+            print(f"[FOLLOWUP] Could not check {trade.codename}")
+    except Exception as e:
+        print(f"[FOLLOWUP ERROR] {e}")
+
+
+def schedule_trade_followup(client: KalshiClient, paper_tracker: PaperTradeTracker,
+                            trade_index: int, entry_price: int):
+    """Schedule a 1-hour follow-up check for a paper trade."""
+    timer = threading.Timer(
+        3600,  # 1 hour
+        _trade_followup,
+        args=(client, paper_tracker, trade_index, entry_price),
+    )
+    timer.daemon = True
+    timer.start()
 
 
 def copy_trade(client: KalshiClient, alert: WhaleAlert, balance_cents: int) -> tuple[bool, int, int]:
@@ -174,9 +201,9 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
             send_whale_alert(alert, trade_placed, config.PAPER_TRADING, balance_cents)
             log_whale(alert, trade_placed, copy_count)
 
-            # Record paper trade for outcome tracking
+            # Record paper trade for outcome tracking + schedule 1hr follow-up
             if config.PAPER_TRADING and paper_tracker and copy_count > 0:
-                paper_tracker.record_trade(
+                recorded_trade = paper_tracker.record_trade(
                     ticker=alert.market_ticker,
                     title=alert.market_title,
                     side=alert.trade_side,
@@ -185,6 +212,15 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
                     multiplier=alert.multiplier,
                     confidence=alert.confidence_score,
                 )
+                # Tell them the codename
+                _send_message(
+                    f"This trade is designated {recorded_trade.codename}.\n"
+                    f"I'll check back in 1 hour with a status report."
+                )
+                # Schedule the 1-hour follow-up
+                trade_idx = len(paper_tracker.trades) - 1
+                schedule_trade_followup(client, paper_tracker, trade_idx, alert.trade_price_cents)
+                print(f"  [FOLLOWUP] Scheduled 1hr check for {recorded_trade.codename}")
 
             # Track in activity log
             tracker.record_whale(
@@ -269,12 +305,12 @@ def _eod_recap_loop(client: KalshiClient, paper_tracker: PaperTradeTracker):
             today_trades = paper_tracker.get_today_trades()
             if today_trades:
                 recap = paper_tracker.format_recap(today_trades)
-                msg = f"Good evening, Master Wayne. Here's how today's whale trades performed.\n\n{recap}"
+                msg = f"Good evening, Master Bruce. Here's how today's whale trades performed.\n\n{recap}"
                 _send_message(msg)
                 print(f"[EOD RECAP] Sent recap for {len(today_trades)} paper trades")
             else:
                 _send_message(
-                    "Good evening, Master Wayne. No whale trades detected today. "
+                    "Good evening, Master Bruce. No whale trades detected today. "
                     "The markets were quiet. Even Gotham has its calm nights. I'll keep watch."
                 )
                 print("[EOD RECAP] No trades today, sent quiet day message")

@@ -64,7 +64,7 @@ def send_whale_alert(alert: WhaleAlert, trade_placed: bool, paper_mode: bool,
     copy_cost_dollars = (copy_count * alert.trade_price_cents) / 100
 
     message = (
-        f"Master Wayne, we have a whale.\n"
+        f"Master Bruce, we have a whale.\n"
         f"\n"
         f"{'='*30}\n"
         f"WHALE DETECTED {mode_tag}\n"
@@ -97,7 +97,7 @@ def send_whale_alert(alert: WhaleAlert, trade_placed: bool, paper_mode: bool,
 def send_startup_message(paper_mode: bool, market_count: int) -> bool:
     mode = "PAPER TRADING" if paper_mode else "LIVE TRADING"
     message = (
-        f"Good evening, Master Wayne. The cave is online.\n"
+        f"Good evening, Master Bruce. The cave is online.\n"
         f"\n"
         f"{'='*30}\n"
         f"ALFRED WHALE DETECTION SYSTEM\n"
@@ -119,7 +119,7 @@ def send_startup_message(paper_mode: bool, market_count: int) -> bool:
         f"\n"
         f"Commands: /status /today /recap /balance /datacheck /help\n"
         f"\n"
-        f"I shall be watching the markets, Master Wayne.\n"
+        f"I shall be watching the markets, Master Bruce.\n"
         f"Do try to get some sleep."
     )
     return _send_message(message)
@@ -127,7 +127,7 @@ def send_startup_message(paper_mode: bool, market_count: int) -> bool:
 
 def send_error_message(error: str) -> bool:
     message = (
-        f"Master Wayne, I'm afraid we have a problem.\n"
+        f"Master Bruce, I'm afraid we have a problem.\n"
         f"\n"
         f"{error}\n"
         f"\n"
@@ -136,11 +136,48 @@ def send_error_message(error: str) -> bool:
     return _send_message(message)
 
 
+def send_trade_followup(trade, entry_price: int) -> bool:
+    """Send the 1-hour follow-up report for a paper trade."""
+    pnl_dollars = trade.pnl_cents / 100
+    price_change = trade.exit_price_cents - entry_price
+    direction = "UP" if price_change > 0 else "DOWN" if price_change < 0 else "FLAT"
+    status = "SETTLED" if trade.resolved else "STILL OPEN"
+
+    if trade.pnl_cents > 0:
+        verdict = "The whale was right. This one would have printed."
+    elif trade.pnl_cents < 0:
+        verdict = "The whale got burned on this one. Sometimes even Gotham's finest get it wrong."
+    else:
+        verdict = "No movement yet. The market hasn't made up its mind."
+
+    message = (
+        f"Master Bruce, 1-hour check-in on {trade.codename}.\n"
+        f"\n"
+        f"{'='*30}\n"
+        f"TRADE FOLLOW-UP — {trade.codename.upper()}\n"
+        f"{'='*30}\n"
+        f"\n"
+        f"Market: {trade.market_title}\n"
+        f"Ticker: {trade.market_ticker}\n"
+        f"\n"
+        f"Entry: {entry_price}c ({trade.side.upper()})\n"
+        f"Now: {trade.exit_price_cents}c ({direction} {abs(price_change)}c)\n"
+        f"Status: {status}\n"
+        f"\n"
+        f"Paper P&L: ${pnl_dollars:+.2f} ({trade.contract_count} contracts)\n"
+        f"Whale was: {trade.whale_multiplier:.1f}x avg | Conf: {trade.confidence}\n"
+        f"{'='*30}\n"
+        f"\n"
+        f"{verdict}"
+    )
+    return _send_message(message)
+
+
 def send_near_miss_alert(near_miss: dict) -> bool:
     """Alert when a trade is big but didn't quite hit whale threshold."""
     pct_to_whale = (near_miss["multiplier"] / config.WHALE_THRESHOLD_MULTIPLIER) * 100
     message = (
-        f"Master Wayne, something is stirring.\n"
+        f"Master Bruce, something is stirring.\n"
         f"\n"
         f"{'='*30}\n"
         f"NEAR MISS DETECTED\n"
@@ -162,7 +199,7 @@ def send_near_miss_alert(near_miss: dict) -> bool:
 def send_volume_spike_alert(spike: VolumeSpikeAlert) -> bool:
     """Alert when a market suddenly gets way more trades than normal."""
     message = (
-        f"Master Wayne, unusual activity.\n"
+        f"Master Bruce, unusual activity.\n"
         f"\n"
         f"{'='*30}\n"
         f"VOLUME SPIKE\n"
@@ -187,7 +224,7 @@ def send_hourly_briefing(stats: dict, near_misses: list, volume_spikes: list) ->
     now = datetime.now(timezone.utc).strftime("%H:%M UTC")
 
     lines = [
-        f"Hourly briefing, Master Wayne — {now}.",
+        f"Hourly briefing, Master Bruce — {now}.",
         "",
         f"{'='*30}",
         "MARKET BRIEFING",
@@ -231,13 +268,13 @@ def send_hourly_briefing(stats: dict, near_misses: list, volume_spikes: list) ->
     # Overall assessment — Alfred style
     lines.append("")
     if stats["whales"] > 0:
-        lines.append("We caught one this hour, Master Wayne. Check the whale alerts above.")
+        lines.append("We caught one this hour, Master Bruce. Check the whale alerts above.")
     elif stats["near_misses"] >= 3:
         lines.append("Multiple near misses. The water is getting choppy. I'd keep an eye on this if I were you.")
     elif stats["volume_spikes"] > 0:
         lines.append("Volume is picking up. Where there's smoke, there's usually fire.")
     elif stats["trades_analyzed"] > 100:
-        lines.append("Steady activity. No whales yet, but the markets are awake. Patience, Master Wayne.")
+        lines.append("Steady activity. No whales yet, but the markets are awake. Patience, Master Bruce.")
     elif stats["trades_analyzed"] > 0:
         lines.append("Quiet hour. Markets are moving slowly. I remain at my post.")
     else:
@@ -273,7 +310,7 @@ def _handle_command(text: str) -> str:
 
     if cmd in ("/status", "status", "whats the update", "update"):
         if _activity_tracker:
-            reply = "Master Wayne, here's your current status.\n\n"
+            reply = "Master Bruce, here's your current status.\n\n"
             reply += _activity_tracker.format_status_report()
             if _kalshi_client and _kalshi_client.authenticated:
                 try:
@@ -284,17 +321,17 @@ def _handle_command(text: str) -> str:
                     reply += "\nKalshi Balance: (could not fetch)\n"
             reply += "\nAll systems nominal. The cave is secure."
             return reply
-        return "Master Wayne, the systems are running but I haven't collected any data yet. Give me a moment."
+        return "Master Bruce, the systems are running but I haven't collected any data yet. Give me a moment."
 
     elif cmd in ("/today", "today"):
         if _activity_tracker:
-            return "Master Wayne, today's briefing.\n\n" + _activity_tracker.format_status_report()
-        return "Master Wayne, no activity data for today yet. I've only just started."
+            return "Master Bruce, today's briefing.\n\n" + _activity_tracker.format_status_report()
+        return "Master Bruce, no activity data for today yet. I've only just started."
 
     elif cmd in ("/yesterday", "yesterday"):
         if _activity_tracker:
-            return "Master Wayne, yesterday's debrief.\n\n" + _activity_tracker.format_morning_report()
-        return "Master Wayne, I'm afraid I don't have any data from yesterday."
+            return "Master Bruce, yesterday's debrief.\n\n" + _activity_tracker.format_morning_report()
+        return "Master Bruce, I'm afraid I don't have any data from yesterday."
 
     elif cmd in ("/recap", "recap"):
         if _paper_tracker:
@@ -304,30 +341,30 @@ def _handle_command(text: str) -> str:
             today = _paper_tracker.get_today_trades()
             if today:
                 recap = _paper_tracker.format_recap(today)
-                return f"Master Wayne, your paper trade recap.\n\n{recap}"
+                return f"Master Bruce, your paper trade recap.\n\n{recap}"
             # Try recent trades if nothing today
             recent = _paper_tracker.get_recent_trades(days=7)
             if recent:
                 recap = _paper_tracker.format_recap(recent)
-                return f"No trades today, Master Wayne. Here's the last 7 days.\n\n{recap}"
-            return "No paper trades recorded yet, Master Wayne. I'll track them when I detect whales."
-        return "Master Wayne, the paper trade tracker isn't initialized yet."
+                return f"No trades today, Master Bruce. Here's the last 7 days.\n\n{recap}"
+            return "No paper trades recorded yet, Master Bruce. I'll track them when I detect whales."
+        return "Master Bruce, the paper trade tracker isn't initialized yet."
 
     elif cmd in ("/balance", "balance"):
         if _kalshi_client:
             if not _kalshi_client.authenticated:
-                return "Master Wayne, balance check requires a valid Kalshi API key. Currently running in public monitoring mode."
+                return "Master Bruce, balance check requires a valid Kalshi API key. Currently running in public monitoring mode."
             try:
                 bal = _kalshi_client.get_balance()
                 cents = bal.get("balance", 0)
-                return f"Master Wayne, your current Kalshi balance is ${cents/100:.2f}."
+                return f"Master Bruce, your current Kalshi balance is ${cents/100:.2f}."
             except Exception as e:
-                return f"I'm afraid I couldn't fetch your balance, Master Wayne. Error: {e}"
-        return "Master Wayne, the Kalshi client isn't initialized yet."
+                return f"I'm afraid I couldn't fetch your balance, Master Bruce. Error: {e}"
+        return "Master Bruce, the Kalshi client isn't initialized yet."
 
     elif cmd in ("/datacheck", "datacheck"):
         if _whale_detector and _whale_detector.trade_history:
-            lines = ["Master Wayne, live data health check.\n"]
+            lines = ["Master Bruce, live data health check.\n"]
             lines.append(f"Markets with data: {len(_whale_detector.trade_history)}")
             total_entries = sum(len(h) for h in _whale_detector.trade_history.values())
             lines.append(f"Total trade entries in memory: {total_entries}\n")
@@ -359,17 +396,17 @@ def _handle_command(text: str) -> str:
             zero_markets = sum(1 for h in _whale_detector.trade_history.values() if h and max(h) == 0)
             if zero_markets > 0:
                 lines.append(f"\nWARNING: {zero_markets} markets have all-zero data")
-                lines.append("Something is wrong with the data feed, Master Wayne.")
+                lines.append("Something is wrong with the data feed, Master Bruce.")
             else:
                 lines.append("\nData flow: HEALTHY")
                 lines.append("Everything is in order. The instruments are reading clearly.")
 
             return "\n".join(lines)
-        return "No trade data in memory yet, Master Wayne. The system needs a few scan cycles to build up history."
+        return "No trade data in memory yet, Master Bruce. The system needs a few scan cycles to build up history."
 
     elif cmd in ("/help", "help"):
         return (
-            "At your service, Master Wayne.\n"
+            "At your service, Master Bruce.\n"
             "\n"
             "  /status     - Quick status + today's stats\n"
             "  /today      - Full report for today so far\n"
@@ -387,13 +424,13 @@ def _handle_command(text: str) -> str:
             "  - Morning briefing — 7 AM Central\n"
             "  - End-of-day recap — 8 PM Central\n"
             "\n"
-            "Why do we fall, Master Wayne?\n"
+            "Why do we fall, Master Bruce?\n"
             "So that we can learn to pick ourselves up."
         )
 
     else:
         return (
-            f"I'm afraid I didn't understand that, Master Wayne — '{text}'.\n"
+            f"I'm afraid I didn't understand that, Master Bruce — '{text}'.\n"
             f"Try /status, /today, /recap, /balance, /datacheck, or /help."
         )
 

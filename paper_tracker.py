@@ -17,6 +17,15 @@ import config
 
 PAPER_TRADES_FILE = "paper_trades.json"
 
+# NATO phonetic alphabet for trade codenames
+NATO_ALPHABET = [
+    "Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot",
+    "Golf", "Hotel", "India", "Juliet", "Kilo", "Lima",
+    "Mike", "November", "Oscar", "Papa", "Quebec", "Romeo",
+    "Sierra", "Tango", "Uniform", "Victor", "Whiskey", "X-Ray",
+    "Yankee", "Zulu",
+]
+
 
 @dataclass
 class PaperTrade:
@@ -35,6 +44,8 @@ class PaperTrade:
     resolved: bool = False      # whether the market has settled or we checked
     pnl_cents: int = 0          # profit/loss in cents
     checked_at: str = ""        # when we last checked the price
+    codename: str = ""          # NATO codename (e.g. "Trade Bravo")
+    followup_sent: bool = False # whether 1-hour followup was sent
 
 
 class PaperTradeTracker:
@@ -44,10 +55,18 @@ class PaperTradeTracker:
         self.trades: list[PaperTrade] = []
         self._load()
 
+    def _next_codename(self) -> str:
+        """Get the next NATO codename for today's trades."""
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today_count = sum(1 for t in self.trades if t.timestamp.startswith(today))
+        name = NATO_ALPHABET[today_count % len(NATO_ALPHABET)]
+        return f"Trade {name}"
+
     def record_trade(self, ticker: str, title: str, side: str,
                      price_cents: int, count: int, multiplier: float,
                      confidence: float):
         """Record a new paper trade when a whale is detected."""
+        codename = self._next_codename()
         trade = PaperTrade(
             timestamp=datetime.now(timezone.utc).isoformat(),
             market_ticker=ticker,
@@ -58,6 +77,7 @@ class PaperTradeTracker:
             cost_cents=count * price_cents,
             whale_multiplier=multiplier,
             confidence=confidence,
+            codename=codename,
         )
         self.trades.append(trade)
         self._save()
@@ -114,6 +134,42 @@ class PaperTradeTracker:
             self._save()
         return updated
 
+    def check_single_trade(self, trade: PaperTrade, client) -> PaperTrade | None:
+        """Check the current price of a single trade for follow-up reporting."""
+        try:
+            market_data = client.get_market(trade.market_ticker)
+            market = market_data.get("market", market_data)
+
+            status = market.get("status", "")
+            result = market.get("result", "")
+
+            if status == "settled" or result:
+                if result == "yes":
+                    current_price = 100
+                elif result == "no":
+                    current_price = 0
+                else:
+                    current_price = market.get("yes_price", market.get("last_price", trade.entry_price_cents))
+                trade.resolved = True
+            else:
+                current_price = market.get("yes_price", market.get("last_price", trade.entry_price_cents))
+
+            trade.exit_price_cents = current_price
+            trade.checked_at = datetime.now(timezone.utc).isoformat()
+
+            if trade.side == "yes":
+                pnl_per_contract = current_price - trade.entry_price_cents
+            else:
+                pnl_per_contract = trade.entry_price_cents - current_price
+
+            trade.pnl_cents = pnl_per_contract * trade.contract_count
+            trade.followup_sent = True
+            self._save()
+            return trade
+        except Exception as e:
+            print(f"[FOLLOWUP] Could not check {trade.market_ticker}: {e}")
+            return None
+
     def get_today_trades(self) -> list[PaperTrade]:
         """Get all paper trades from today (UTC)."""
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -149,9 +205,10 @@ class PaperTradeTracker:
             exit_p = t.exit_price_cents
             direction = "UP" if t.pnl_cents > 0 else "DOWN" if t.pnl_cents < 0 else "FLAT"
             status = "SETTLED" if t.resolved else "OPEN"
+            label = f"  {t.codename} — " if t.codename else "  "
 
             recap += (
-                f"  {t.market_ticker}\n"
+                f"{label}{t.market_ticker}\n"
                 f"    {t.side.upper()} {t.contract_count} @ {entry}c -> {exit_p}c [{status}]\n"
                 f"    Whale: {t.whale_multiplier}x | Conf: {t.confidence}\n"
                 f"    P&L: ${pnl_dollars:+.2f} ({direction})\n\n"
