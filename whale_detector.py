@@ -94,8 +94,13 @@ class WhaleDetector:
                 continue
             seen.add(trade_id)
 
-            count = trade.get("count", 0)
-            price_cents = trade.get("yes_price", 50)
+            # Kalshi API v2 returns "count_fp" (string) and "yes_price_dollars" (string)
+            count_raw = trade.get("count_fp", trade.get("count", 0))
+            count = int(float(count_raw)) if count_raw else 0
+
+            price_raw = trade.get("yes_price_dollars", trade.get("yes_price", 0.50))
+            price_cents = int(float(price_raw) * 100) if price_raw else 50
+
             side = trade.get("taker_side", "unknown")
 
             rolling_avg = self._calculate_rolling_average(ticker)
