@@ -28,6 +28,7 @@ from activity_tracker import ActivityTracker
 from paper_tracker import PaperTradeTracker
 from telegram_bot import (
     send_whale_alert, send_startup_message, send_error_message,
+    send_near_miss_alert, send_volume_spike_alert, send_hourly_briefing,
     set_activity_tracker, set_kalshi_client, set_paper_tracker, set_whale_detector,
     start_command_listener, _send_message,
 )
@@ -198,19 +199,32 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
                 paper=config.PAPER_TRADING,
             )
 
-    # Track near misses from the detector
+    # Send near-miss alerts (only for significant ones: 7x+ avg)
+    near_miss_count = len(detector.last_near_misses)
     for nm in detector.last_near_misses:
         tracker.record_near_miss(
             ticker=nm["ticker"], title=nm["title"], count=nm["count"],
             rolling_avg=nm["rolling_avg"], multiplier=nm["multiplier"],
         )
+        # Only alert on strong near misses (70%+ of whale threshold)
+        if nm["multiplier"] >= config.WHALE_THRESHOLD_MULTIPLIER * 0.7:
+            send_near_miss_alert(nm)
+            print(f"  NEAR MISS ALERT: {nm['ticker']} — {nm['count']} contracts ({nm['multiplier']:.1f}x avg)")
     detector.last_near_misses.clear()
+
+    # Send volume spike alerts
+    for spike in detector.last_volume_spikes:
+        send_volume_spike_alert(spike)
+        print(f"  VOLUME SPIKE: {spike.market_ticker} — {spike.new_trade_count} trades ({spike.spike_multiplier}x normal)")
+    detector.last_volume_spikes.clear()
+
+    # Update hourly market count
+    detector.hourly_stats["markets_scanned"] = len(markets)
 
     # Track cycle in activity log
     tracker.record_cycle(markets_scanned=len(markets), trades_analyzed=total_trades)
 
     # Diagnostic: show real data is flowing through the detector
-    near_miss_count = len(detector.last_near_misses)
     sample_avgs = []
     for t, history in list(detector.trade_history.items())[:3]:
         if history:
@@ -273,6 +287,35 @@ def _eod_recap_loop(client: KalshiClient, paper_tracker: PaperTradeTracker):
 def start_eod_recap_scheduler(client: KalshiClient, paper_tracker: PaperTradeTracker):
     """Start the background thread for end-of-day paper trade recaps."""
     thread = threading.Thread(target=_eod_recap_loop, args=(client, paper_tracker), daemon=True)
+    thread.start()
+    return thread
+
+
+def _hourly_briefing_loop(detector):
+    """Background thread: sends hourly Jarvis briefing to Telegram."""
+    print("[HOURLY] Briefing scheduler started — updates every 60 minutes, 24/7")
+
+    while True:
+        time.sleep(3600)  # Wait one hour
+
+        try:
+            stats = detector.hourly_stats.copy()
+            near_misses = list(detector.hourly_near_misses)
+            volume_spikes = list(detector.last_volume_spikes)
+
+            send_hourly_briefing(stats, near_misses, volume_spikes)
+            print(f"[HOURLY] Briefing sent — {stats['trades_analyzed']} trades, "
+                  f"{stats['whales']} whales, {stats['near_misses']} near misses")
+
+            # Reset accumulators for next hour
+            detector.reset_hourly_stats()
+        except Exception as e:
+            print(f"[HOURLY ERROR] {e}")
+
+
+def start_hourly_briefing_scheduler(detector):
+    """Start the background thread for hourly Telegram briefings."""
+    thread = threading.Thread(target=_hourly_briefing_loop, args=(detector,), daemon=True)
     thread.start()
     return thread
 
@@ -362,6 +405,10 @@ def main():
     # Start end-of-day recap scheduler (background thread)
     start_eod_recap_scheduler(client, paper_tracker)
     print("[INIT] End-of-day recap scheduler started (8 PM Central daily)")
+
+    # Start hourly briefing scheduler (background thread)
+    start_hourly_briefing_scheduler(detector)
+    print("[INIT] Hourly briefing scheduler started (every 60 min, 24/7)")
 
     print("\n[RUNNING] Bot is now monitoring. Press Ctrl+C to stop.\n")
 

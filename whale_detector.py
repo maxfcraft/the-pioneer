@@ -3,12 +3,18 @@ Whale detection engine.
 
 Maintains a rolling window of recent trades per market and flags any single
 trade whose contract count is >= WHALE_THRESHOLD_MULTIPLIER * rolling average.
+Also tracks volume spikes (sudden surges in trade frequency per market).
 """
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import config
+
+# Volume spike: if new trades in a single scan exceed this multiplier of the
+# market's average new-trades-per-scan, it counts as a volume spike.
+VOLUME_SPIKE_MULTIPLIER = 3.0
 
 
 @dataclass
@@ -23,6 +29,16 @@ class WhaleAlert:
     rolling_average: float    # average trade size over the window
     multiplier: float         # how many X above average this trade is
     confidence_score: float   # 0-100 score
+
+
+@dataclass
+class VolumeSpikeAlert:
+    """A sudden surge in trade count for a market."""
+    market_ticker: str
+    market_title: str
+    new_trade_count: int      # how many new trades this scan
+    avg_trades_per_scan: float
+    spike_multiplier: float   # how many X above normal volume
 
 
 class WhaleDetector:
@@ -43,6 +59,23 @@ class WhaleDetector:
         self.seen_trade_ids: dict[str, set] = defaultdict(set)
         # Recent near-miss trades (close to threshold but didn't trigger)
         self.last_near_misses: list = []
+        # Volume tracking: market_ticker -> deque of new-trade-counts per scan
+        self.volume_history: dict[str, deque] = defaultdict(
+            lambda: deque(maxlen=30)  # last 30 scan cycles
+        )
+        # Volume spike alerts from the most recent scan cycle
+        self.last_volume_spikes: list[VolumeSpikeAlert] = []
+        # Hourly stats accumulator (reset each hour by the briefing loop)
+        self.hourly_stats = {
+            "trades_analyzed": 0,
+            "markets_scanned": 0,
+            "whales": 0,
+            "near_misses": 0,
+            "volume_spikes": 0,
+            "largest_trade": {"ticker": "", "count": 0, "title": ""},
+            "hottest_market": {"ticker": "", "title": "", "new_trades": 0},
+        }
+        self.hourly_near_misses: list = []
 
     def _calculate_rolling_average(self, ticker: str) -> float:
         """Calculate the average trade size for a market's rolling window."""
@@ -84,6 +117,7 @@ class WhaleDetector:
         """
         alerts = []
         seen = self.seen_trade_ids[ticker]
+        new_trade_count = 0
 
         # Sort trades oldest-first so rolling average builds chronologically
         sorted_trades = sorted(trades, key=lambda t: t.get("created_time", ""))
@@ -93,6 +127,7 @@ class WhaleDetector:
             if not trade_id or trade_id in seen:
                 continue
             seen.add(trade_id)
+            new_trade_count += 1
 
             # Kalshi API v2 returns "count_fp" (string) and "yes_price_dollars" (string)
             count_raw = trade.get("count_fp", trade.get("count", 0))
@@ -109,6 +144,12 @@ class WhaleDetector:
             # (the whale trade itself should not inflate the average it's compared against)
             self.trade_history[ticker].append(count)
 
+            # Track largest trade this hour
+            if count > self.hourly_stats["largest_trade"]["count"]:
+                self.hourly_stats["largest_trade"] = {
+                    "ticker": ticker, "count": count, "title": market_title,
+                }
+
             # Need at least 10 trades of history to avoid false positives
             if len(self.trade_history[ticker]) < 10:
                 continue
@@ -120,18 +161,22 @@ class WhaleDetector:
 
             # Track near misses (50%+ of threshold but didn't trigger)
             if multiplier >= config.WHALE_THRESHOLD_MULTIPLIER * 0.5 and multiplier < config.WHALE_THRESHOLD_MULTIPLIER:
-                self.last_near_misses.append({
+                near_miss = {
                     "ticker": ticker,
                     "title": market_title,
                     "count": count,
                     "rolling_avg": rolling_avg,
                     "multiplier": multiplier,
-                })
+                }
+                self.last_near_misses.append(near_miss)
+                self.hourly_near_misses.append(near_miss)
+                self.hourly_stats["near_misses"] += 1
                 # Keep only last 10
                 if len(self.last_near_misses) > 10:
                     self.last_near_misses.pop(0)
 
             if multiplier >= config.WHALE_THRESHOLD_MULTIPLIER:
+                self.hourly_stats["whales"] += 1
                 confidence = self._calculate_confidence(
                     multiplier, len(self.trade_history[ticker])
                 )
@@ -147,4 +192,44 @@ class WhaleDetector:
                     confidence_score=confidence,
                 ))
 
+        # Volume spike detection
+        self.volume_history[ticker].append(new_trade_count)
+        vol_hist = self.volume_history[ticker]
+        if len(vol_hist) >= 5 and new_trade_count > 0:
+            avg_vol = sum(vol_hist) / len(vol_hist)
+            if avg_vol > 0:
+                spike_mult = new_trade_count / avg_vol
+                if spike_mult >= VOLUME_SPIKE_MULTIPLIER:
+                    spike = VolumeSpikeAlert(
+                        market_ticker=ticker,
+                        market_title=market_title,
+                        new_trade_count=new_trade_count,
+                        avg_trades_per_scan=round(avg_vol, 1),
+                        spike_multiplier=round(spike_mult, 1),
+                    )
+                    self.last_volume_spikes.append(spike)
+                    self.hourly_stats["volume_spikes"] += 1
+
+        # Track hottest market this hour
+        if new_trade_count > self.hourly_stats["hottest_market"]["new_trades"]:
+            self.hourly_stats["hottest_market"] = {
+                "ticker": ticker, "title": market_title, "new_trades": new_trade_count,
+            }
+
+        self.hourly_stats["trades_analyzed"] += new_trade_count
+
         return alerts
+
+    def reset_hourly_stats(self):
+        """Reset hourly accumulators. Called after sending the hourly briefing."""
+        self.hourly_stats = {
+            "trades_analyzed": 0,
+            "markets_scanned": 0,
+            "whales": 0,
+            "near_misses": 0,
+            "volume_spikes": 0,
+            "largest_trade": {"ticker": "", "count": 0, "title": ""},
+            "hottest_market": {"ticker": "", "title": "", "new_trades": 0},
+        }
+        self.hourly_near_misses.clear()
+        self.last_volume_spikes.clear()

@@ -15,7 +15,7 @@ import threading
 import time
 import requests
 import config
-from whale_detector import WhaleAlert
+from whale_detector import WhaleAlert, VolumeSpikeAlert
 
 
 # Will be set by main.py after ActivityTracker is created
@@ -106,15 +106,17 @@ def send_startup_message(paper_mode: bool, market_count: int) -> bool:
         f"Poll interval: {config.POLL_INTERVAL_SECONDS}s\n"
         f"Portfolio risk: {int(config.PORTFOLIO_RISK_FRACTION * 100)}% per trade\n"
         f"\n"
-        f"I'm at your service. Available commands:\n"
-        f"  /status  - Quick status check\n"
-        f"  /today   - Today's full report\n"
-        f"  /yesterday - Yesterday's summary\n"
-        f"  /recap   - Paper trade P&L recap\n"
-        f"  /balance - Your Kalshi balance\n"
-        f"  /help    - All commands\n"
+        f"I'm at your service. You'll hear from me:\n"
+        f"  - Instantly on whale detections\n"
+        f"  - Instantly on near misses (7x+ avg)\n"
+        f"  - Instantly on volume spikes (3x+ normal)\n"
+        f"  - Hourly briefings with market summary\n"
+        f"  - Morning briefing at 7 AM\n"
+        f"  - End-of-day recap at 8 PM\n"
         f"\n"
-        f"I'll notify you the moment I spot a whale, sir."
+        f"Commands: /status /today /recap /balance /datacheck /help\n"
+        f"\n"
+        f"Standing by, sir. I'll keep you posted."
     )
     return _send_message(message)
 
@@ -122,6 +124,115 @@ def send_startup_message(paper_mode: bool, market_count: int) -> bool:
 def send_error_message(error: str) -> bool:
     message = f"Sir, we have a problem.\n\n{error}\n\nI'm working to resolve it. Stand by."
     return _send_message(message)
+
+
+def send_near_miss_alert(near_miss: dict) -> bool:
+    """Alert when a trade is big but didn't quite hit whale threshold."""
+    pct_to_whale = (near_miss["multiplier"] / config.WHALE_THRESHOLD_MULTIPLIER) * 100
+    message = (
+        f"Sir, activity heating up.\n"
+        f"\n"
+        f"{'='*30}\n"
+        f"NEAR MISS DETECTED\n"
+        f"{'='*30}\n"
+        f"\n"
+        f"Market: {near_miss['title']}\n"
+        f"Ticker: {near_miss['ticker']}\n"
+        f"\n"
+        f"Trade size: {near_miss['count']} contracts\n"
+        f"That's {near_miss['multiplier']:.1f}x the average\n"
+        f"({pct_to_whale:.0f}% of whale threshold)\n"
+        f"\n"
+        f"Not a whale yet, but someone is positioning.\n"
+        f"I'm watching this market closely, sir."
+    )
+    return _send_message(message)
+
+
+def send_volume_spike_alert(spike: VolumeSpikeAlert) -> bool:
+    """Alert when a market suddenly gets way more trades than normal."""
+    message = (
+        f"Sir, unusual activity detected.\n"
+        f"\n"
+        f"{'='*30}\n"
+        f"VOLUME SPIKE\n"
+        f"{'='*30}\n"
+        f"\n"
+        f"Market: {spike.market_title}\n"
+        f"Ticker: {spike.market_ticker}\n"
+        f"\n"
+        f"New trades this scan: {spike.new_trade_count}\n"
+        f"Normal avg per scan: {spike.avg_trades_per_scan}\n"
+        f"Spike: {spike.spike_multiplier}x normal volume\n"
+        f"\n"
+        f"The crowd is rushing into this market.\n"
+        f"Could precede a whale. Monitoring, sir."
+    )
+    return _send_message(message)
+
+
+def send_hourly_briefing(stats: dict, near_misses: list, volume_spikes: list) -> bool:
+    """Hourly Jarvis-style check-in with market activity summary."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).strftime("%H:%M UTC")
+
+    lines = [
+        f"Sir, hourly briefing — {now}.",
+        "",
+        f"{'='*30}",
+        "HOURLY MARKET BRIEFING",
+        f"{'='*30}",
+        "",
+        f"Trades analyzed: {stats['trades_analyzed']}",
+        f"Markets scanned: {stats['markets_scanned']}",
+        f"Whales detected: {stats['whales']}",
+        f"Near misses: {stats['near_misses']}",
+        f"Volume spikes: {stats['volume_spikes']}",
+    ]
+
+    # Largest trade
+    lt = stats["largest_trade"]
+    if lt["count"] > 0:
+        lines.append(f"\nBiggest trade: {lt['count']} contracts")
+        lines.append(f"  Market: {lt['title']}")
+
+    # Hottest market
+    hm = stats["hottest_market"]
+    if hm["new_trades"] > 0:
+        lines.append(f"\nHottest market: {hm['title']}")
+        lines.append(f"  {hm['new_trades']} new trades this hour")
+
+    # Near misses
+    if near_misses:
+        lines.append(f"\nNearest misses:")
+        # Show up to 3 closest to whale threshold
+        sorted_nm = sorted(near_misses, key=lambda x: x["multiplier"], reverse=True)
+        for nm in sorted_nm[:3]:
+            pct = (nm["multiplier"] / config.WHALE_THRESHOLD_MULTIPLIER) * 100
+            lines.append(f"  {nm['title']}")
+            lines.append(f"    {nm['count']} contracts ({nm['multiplier']:.1f}x avg, {pct:.0f}% to whale)")
+
+    # Volume spikes
+    if volume_spikes:
+        lines.append(f"\nVolume spikes:")
+        for vs in volume_spikes[:3]:
+            lines.append(f"  {vs.market_title}")
+            lines.append(f"    {vs.new_trade_count} trades ({vs.spike_multiplier}x normal)")
+
+    # Overall assessment
+    lines.append("")
+    if stats["whales"] > 0:
+        lines.append("Action taken this hour. Check whale alerts above for details.")
+    elif stats["near_misses"] >= 3:
+        lines.append("Multiple near misses, sir. Markets are active. A whale could surface soon.")
+    elif stats["volume_spikes"] > 0:
+        lines.append("Volume picking up in some markets. I'm on it, sir.")
+    elif stats["trades_analyzed"] > 0:
+        lines.append("Markets are quiet but I'm watching every trade. Standing by, sir.")
+    else:
+        lines.append("Very low activity this hour. Markets may be between sessions, sir.")
+
+    return _send_message("\n".join(lines))
 
 
 def send_morning_report(report_text: str) -> bool:
@@ -255,18 +366,21 @@ def _handle_command(text: str) -> str:
             "  /datacheck  - Live data health + trade sizes\n"
             "  /help       - This message\n"
             "\n"
-            "You'll also get:\n"
-            "  - Whale alerts in real-time\n"
-            "  - Morning briefing at 7 AM\n"
-            "  - End-of-day trade recap at 9 PM\n"
+            "Automatic alerts:\n"
+            "  - Whale detections (10x+ avg) — instant\n"
+            "  - Near misses (7x+ avg) — instant\n"
+            "  - Volume spikes (3x+ normal) — instant\n"
+            "  - Hourly market briefing — every 60 min\n"
+            "  - Morning briefing — 7 AM Central\n"
+            "  - End-of-day recap — 8 PM Central\n"
             "\n"
-            "I'm always listening, sir."
+            "I'm always watching, sir."
         )
 
     else:
         return (
             f"Sir, I didn't quite catch that — '{text}'.\n"
-            f"Try /status, /today, /recap, /balance, or /help."
+            f"Try /status, /today, /recap, /balance, /datacheck, or /help."
         )
 
 
