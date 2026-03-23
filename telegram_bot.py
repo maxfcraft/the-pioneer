@@ -338,6 +338,14 @@ def _handle_command(text: str) -> str:
             # Check latest prices before generating recap
             if _kalshi_client:
                 _paper_tracker.check_outcomes(_kalshi_client)
+            # Check if user wants yesterday's recap
+            parts = text.strip().lower().split()
+            if len(parts) > 1 and parts[1] == "yesterday":
+                yesterday = _paper_tracker.get_yesterday_trades()
+                if yesterday:
+                    recap = _paper_tracker.format_recap(yesterday)
+                    return f"Master Bruce, yesterday's paper trade recap.\n\n{recap}"
+                return "No paper trades recorded yesterday, Master Bruce."
             today = _paper_tracker.get_today_trades()
             if today:
                 recap = _paper_tracker.format_recap(today)

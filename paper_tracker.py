@@ -17,6 +17,13 @@ import config
 
 PAPER_TRADES_FILE = "paper_trades.json"
 
+
+def _central_today() -> str:
+    """Get today's date string in Central Time (handles UTC offset correctly)."""
+    utc_offset = config.MORNING_REPORT_UTC_OFFSET  # -5 for CDT, -6 for CST
+    central_now = datetime.now(timezone(timedelta(hours=utc_offset)))
+    return central_now.strftime("%Y-%m-%d")
+
 # NATO phonetic alphabet for trade codenames
 NATO_ALPHABET = [
     "Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot",
@@ -57,8 +64,7 @@ class PaperTradeTracker:
 
     def _next_codename(self) -> str:
         """Get the next NATO codename for today's trades."""
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        today_count = sum(1 for t in self.trades if t.timestamp.startswith(today))
+        today_count = len(self.get_today_trades())
         name = NATO_ALPHABET[today_count % len(NATO_ALPHABET)]
         return f"Trade {name}"
 
@@ -171,9 +177,50 @@ class PaperTradeTracker:
             return None
 
     def get_today_trades(self) -> list[PaperTrade]:
-        """Get all paper trades from today (UTC)."""
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        return [t for t in self.trades if t.timestamp.startswith(today)]
+        """Get all paper trades from today (Central Time)."""
+        today = _central_today()
+        # Trades are stored in UTC — convert each to Central for comparison
+        utc_offset = config.MORNING_REPORT_UTC_OFFSET
+        central_tz = timezone(timedelta(hours=utc_offset))
+        result = []
+        for t in self.trades:
+            try:
+                trade_utc = datetime.fromisoformat(t.timestamp)
+                if trade_utc.tzinfo is None:
+                    trade_utc = trade_utc.replace(tzinfo=timezone.utc)
+                trade_central = trade_utc.astimezone(central_tz)
+                if trade_central.strftime("%Y-%m-%d") == today:
+                    result.append(t)
+            except (ValueError, TypeError):
+                # Fallback: prefix match on raw timestamp
+                if t.timestamp.startswith(today):
+                    result.append(t)
+        return result
+
+    def get_date_trades(self, date_str: str) -> list[PaperTrade]:
+        """Get all paper trades for a specific Central Time date (YYYY-MM-DD)."""
+        utc_offset = config.MORNING_REPORT_UTC_OFFSET
+        central_tz = timezone(timedelta(hours=utc_offset))
+        result = []
+        for t in self.trades:
+            try:
+                trade_utc = datetime.fromisoformat(t.timestamp)
+                if trade_utc.tzinfo is None:
+                    trade_utc = trade_utc.replace(tzinfo=timezone.utc)
+                trade_central = trade_utc.astimezone(central_tz)
+                if trade_central.strftime("%Y-%m-%d") == date_str:
+                    result.append(t)
+            except (ValueError, TypeError):
+                if t.timestamp.startswith(date_str):
+                    result.append(t)
+        return result
+
+    def get_yesterday_trades(self) -> list[PaperTrade]:
+        """Get all paper trades from yesterday (Central Time)."""
+        utc_offset = config.MORNING_REPORT_UTC_OFFSET
+        central_tz = timezone(timedelta(hours=utc_offset))
+        yesterday = (datetime.now(central_tz) - timedelta(days=1)).strftime("%Y-%m-%d")
+        return self.get_date_trades(yesterday)
 
     def get_recent_trades(self, days: int = 7) -> list[PaperTrade]:
         """Get paper trades from the last N days."""
@@ -234,10 +281,13 @@ class PaperTradeTracker:
     def _save(self):
         try:
             data = [asdict(t) for t in self.trades]
-            with open(PAPER_TRADES_FILE, "w") as f:
+            # Atomic write: write to temp file first, then rename
+            tmp_file = PAPER_TRADES_FILE + ".tmp"
+            with open(tmp_file, "w") as f:
                 json.dump(data, f, indent=2)
-        except Exception:
-            pass
+            os.replace(tmp_file, PAPER_TRADES_FILE)
+        except Exception as e:
+            print(f"[PAPER] ERROR saving trades: {e}")
 
     def _load(self):
         if not os.path.exists(PAPER_TRADES_FILE):
@@ -246,5 +296,5 @@ class PaperTradeTracker:
             with open(PAPER_TRADES_FILE, "r") as f:
                 data = json.load(f)
             self.trades = [PaperTrade(**d) for d in data]
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[PAPER] ERROR loading trades: {e}")
