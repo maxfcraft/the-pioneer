@@ -57,11 +57,17 @@ def send_whale_alert(alert: WhaleAlert, trade_placed: bool, paper_mode: bool,
         trade_status = "PAPER MODE (no real trade)"
 
     whale_size_dollars = alert.trade_total_cents / 100
-    balance_dollars = balance_cents / 100
-    risk_pct = int(config.PORTFOLIO_RISK_FRACTION * 100)
-    risk_dollars = balance_dollars * config.PORTFOLIO_RISK_FRACTION
-    copy_count = max(1, int(risk_dollars * 100) // alert.trade_price_cents)
+    copy_amount = config.PAPER_COPY_AMOUNT_CENTS
+    copy_count = max(1, copy_amount // alert.trade_price_cents)
     copy_cost_dollars = (copy_count * alert.trade_price_cents) / 100
+
+    # Calculate potential outcomes for the $10 copy
+    if alert.trade_side == "yes":
+        max_profit = copy_count * (100 - alert.trade_price_cents)  # cents
+        max_loss = copy_count * alert.trade_price_cents  # cents
+    else:
+        max_profit = copy_count * alert.trade_price_cents  # cents
+        max_loss = copy_count * (100 - alert.trade_price_cents)  # cents
 
     message = (
         f"Master Bruce, we have a whale.\n"
@@ -78,12 +84,13 @@ def send_whale_alert(alert: WhaleAlert, trade_placed: bool, paper_mode: bool,
         f"Price: {alert.trade_price_cents}c per contract\n"
         f"Whale Total: ${whale_size_dollars:,.2f}\n"
         f"\n"
-        f"Rolling Avg: {alert.rolling_average} contracts\n"
         f"Multiplier: {alert.multiplier}x average\n"
         f"Confidence: {alert.confidence_score}/100\n"
         f"\n"
-        f"Your Balance: ${balance_dollars:,.2f}\n"
-        f"Copy Trade: {copy_count} contracts @ {alert.trade_price_cents}c = ${copy_cost_dollars:,.2f} ({risk_pct}% of balance)\n"
+        f"${copy_amount/100:.0f} Copy Trade:\n"
+        f"  {copy_count} contracts @ {alert.trade_price_cents}c = ${copy_cost_dollars:.2f}\n"
+        f"  If whale is right: +${max_profit/100:.2f}\n"
+        f"  If whale is wrong: -${max_loss/100:.2f}\n"
         f"Status: {trade_status}\n"
         f"{'='*30}\n"
         f"\n"
@@ -103,21 +110,19 @@ def send_startup_message(paper_mode: bool, market_count: int) -> bool:
         f"ALFRED WHALE DETECTION SYSTEM\n"
         f"{'='*30}\n"
         f"\n"
-        f"Mode: {mode}\n"
+        f"Mode: {mode} (SNIPER)\n"
         f"Monitoring: {market_count} weather markets\n"
         f"Threshold: {config.WHALE_THRESHOLD_MULTIPLIER}x average\n"
+        f"Min trade size: ${config.WHALE_MIN_DOLLAR_SIZE:.0f}\n"
+        f"Paper copy: ${config.PAPER_COPY_AMOUNT_CENTS/100:.0f} per trade\n"
         f"Poll interval: {config.POLL_INTERVAL_SECONDS}s\n"
-        f"Portfolio risk: {int(config.PORTFOLIO_RISK_FRACTION * 100)}% per trade\n"
         f"\n"
         f"You'll hear from me:\n"
-        f"  - Instantly on whale detections\n"
-        f"  - Instantly on near misses (7x+ avg)\n"
-        f"  - Instantly on volume spikes (3x+ normal)\n"
-        f"  - Hourly briefings (7 AM - 8 PM Central)\n"
+        f"  - Instantly on real whale detections ($50+ at 25x+)\n"
         f"  - Morning briefing at 7 AM\n"
-        f"  - End-of-day recap at 8 PM\n"
+        f"  - End-of-day recap at 8 PM (with $10 copy P&L)\n"
         f"\n"
-        f"Commands: /status /today /recap /balance /datacheck /help\n"
+        f"Commands: /status /today /recap /recap yesterday /balance /help\n"
         f"\n"
         f"I shall be watching the markets, Master Bruce.\n"
         f"Do try to get some sleep."

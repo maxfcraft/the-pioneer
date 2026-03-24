@@ -84,25 +84,33 @@ class WhaleDetector:
             return 0.0
         return sum(history) / len(history)
 
-    def _calculate_confidence(self, multiplier: float, history_size: int) -> float:
+    def _calculate_confidence(self, multiplier: float, history_size: int,
+                              total_dollars: float) -> float:
         """
-        Confidence score from 0-100 based on:
-        - How far above the threshold the trade is (higher = more confident)
-        - How much history we have (more data = more confident)
+        Dollar-weighted confidence score (0-100).
 
-        A trade that is exactly at threshold with a full window gets 50.
-        Scores scale up from there.
+        Factors:
+        - 30% data quality: how full the rolling window is (more history = more reliable)
+        - 30% multiplier excess: how far above 25x threshold (bigger outlier = stronger signal)
+        - 40% dollar size: actual money at risk (a $500 whale >> a $50 whale)
+
+        This means a $500 trade at 30x with full history = very high confidence,
+        while a $51 trade at 25x with thin history = low confidence.
         """
-        # History factor: 0-1 based on how full our rolling window is
+        # Data quality: 0-1 based on how full our rolling window is
         history_factor = min(history_size / config.ROLLING_WINDOW_SIZE, 1.0)
 
-        # Multiplier factor: how far above threshold (log scale would be better
-        # but linear is fine for v1)
+        # Multiplier factor: how far above threshold
         threshold = config.WHALE_THRESHOLD_MULTIPLIER
         excess = (multiplier - threshold) / threshold  # 0 at threshold, 1 at 2x threshold
         multiplier_factor = min(excess + 0.5, 1.0)  # base 0.5 at threshold
 
-        score = (history_factor * 0.4 + multiplier_factor * 0.6) * 100
+        # Dollar factor: scales from 0 at $50 floor to 1.0 at $500+
+        min_dollars = config.WHALE_MIN_DOLLAR_SIZE
+        dollar_factor = min((total_dollars - min_dollars) / 450, 1.0)  # 0 at $50, 1 at $500
+        dollar_factor = max(dollar_factor, 0.0)
+
+        score = (history_factor * 0.3 + multiplier_factor * 0.3 + dollar_factor * 0.4) * 100
         return round(min(max(score, 0), 100), 1)
 
     def process_trades(self, ticker: str, trades: list, market_title: str) -> list[WhaleAlert]:
@@ -176,9 +184,14 @@ class WhaleDetector:
                     self.last_near_misses.pop(0)
 
             if multiplier >= config.WHALE_THRESHOLD_MULTIPLIER:
+                total_dollars = (count * price_cents) / 100
+                # Minnow filter: skip trades under the dollar floor
+                if total_dollars < config.WHALE_MIN_DOLLAR_SIZE:
+                    continue
+
                 self.hourly_stats["whales"] += 1
                 confidence = self._calculate_confidence(
-                    multiplier, len(self.trade_history[ticker])
+                    multiplier, len(self.trade_history[ticker]), total_dollars
                 )
                 alerts.append(WhaleAlert(
                     market_ticker=ticker,

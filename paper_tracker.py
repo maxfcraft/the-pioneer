@@ -228,13 +228,14 @@ class PaperTradeTracker:
         return [t for t in self.trades if t.timestamp >= cutoff]
 
     def format_recap(self, trades: list[PaperTrade] = None) -> str:
-        """Format a recap message for Telegram."""
+        """Format a recap message for Telegram with $10 copy trade P&L."""
         if trades is None:
             trades = self.get_today_trades()
 
         if not trades:
             return ""
 
+        copy_amount = config.PAPER_COPY_AMOUNT_CENTS / 100  # $10 default
         total_pnl = sum(t.pnl_cents for t in trades)
         winners = [t for t in trades if t.pnl_cents > 0]
         losers = [t for t in trades if t.pnl_cents < 0]
@@ -242,7 +243,7 @@ class PaperTradeTracker:
 
         recap = (
             f"{'='*30}\n"
-            f"PAPER TRADE RECAP\n"
+            f"PAPER TRADE RECAP (${copy_amount:.0f} copy)\n"
             f"{'='*30}\n\n"
         )
 
@@ -250,15 +251,17 @@ class PaperTradeTracker:
             pnl_dollars = t.pnl_cents / 100
             entry = t.entry_price_cents
             exit_p = t.exit_price_cents
-            direction = "UP" if t.pnl_cents > 0 else "DOWN" if t.pnl_cents < 0 else "FLAT"
             status = "SETTLED" if t.resolved else "OPEN"
             label = f"  {t.codename} — " if t.codename else "  "
 
+            # ROI for this individual trade
+            trade_roi = (t.pnl_cents / max(t.cost_cents, 1)) * 100
+
             recap += (
-                f"{label}{t.market_ticker}\n"
+                f"{label}{t.market_title}\n"
                 f"    {t.side.upper()} {t.contract_count} @ {entry}c -> {exit_p}c [{status}]\n"
-                f"    Whale: {t.whale_multiplier}x | Conf: {t.confidence}\n"
-                f"    P&L: ${pnl_dollars:+.2f} ({direction})\n\n"
+                f"    Whale: {t.whale_multiplier}x | Conf: {t.confidence}/100\n"
+                f"    ${copy_amount:.0f} copy -> ${pnl_dollars:+.2f} ({trade_roi:+.1f}%)\n\n"
             )
 
         total_dollars = total_pnl / 100
@@ -267,12 +270,18 @@ class PaperTradeTracker:
 
         recap += (
             f"{'='*30}\n"
-            f"SUMMARY\n"
+            f"BOTTOM LINE\n"
             f"  Trades: {len(trades)} ({len(winners)}W / {len(losers)}L / {len(flat)}F)\n"
-            f"  Total invested: ${total_cost:.2f}\n"
-            f"  Net P&L: ${total_dollars:+.2f} ({roi:+.1f}%)\n"
-            f"{'='*30}\n"
+            f"  Total risked: ${total_cost:.2f}\n"
+            f"  Net P&L: ${total_dollars:+.2f} ({roi:+.1f}% ROI)\n"
         )
+
+        # Show what a $10 per trade bankroll would look like
+        if len(trades) > 1:
+            total_deployed = copy_amount * len(trades)
+            recap += f"  ${copy_amount:.0f}/trade x {len(trades)} trades = ${total_deployed:.0f} deployed\n"
+
+        recap += f"{'='*30}\n"
 
         return recap
 

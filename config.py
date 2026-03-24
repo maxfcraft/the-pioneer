@@ -12,11 +12,16 @@ KALSHI_BASE_URL = os.getenv("KALSHI_BASE_URL", "https://api.elections.kalshi.com
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# --- Whale Detection ---
+# --- Whale Detection (Sniper Mode) ---
 # A trade is a "whale" if its size is >= this multiplier times the rolling average
-WHALE_THRESHOLD_MULTIPLIER = float(os.getenv("WHALE_THRESHOLD_MULTIPLIER", "10"))
+# 25x = only truly massive outliers (sniper approach)
+WHALE_THRESHOLD_MULTIPLIER = float(os.getenv("WHALE_THRESHOLD_MULTIPLIER", "25"))
 # Number of recent trades used to calculate the rolling average
 ROLLING_WINDOW_SIZE = int(os.getenv("ROLLING_WINDOW_SIZE", "100"))
+# Minimum total dollar size to even consider a trade (filters minnows)
+WHALE_MIN_DOLLAR_SIZE = float(os.getenv("WHALE_MIN_DOLLAR_SIZE", "50"))
+# Fixed dollar amount for paper copy trades (hypothetical "what if I copied with $X")
+PAPER_COPY_AMOUNT_CENTS = int(os.getenv("PAPER_COPY_AMOUNT_CENTS", "1000"))  # $10
 
 # --- Trading ---
 # What percentage of your portfolio balance to risk per whale trade (0.15 = 15%)

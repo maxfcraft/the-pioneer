@@ -122,9 +122,13 @@ def copy_trade(client: KalshiClient, alert: WhaleAlert, balance_cents: int) -> t
         return False, 0, 0
 
     if config.PAPER_TRADING:
+        # In paper mode, use the fixed copy amount (default $10) instead of balance
+        paper_risk = config.PAPER_COPY_AMOUNT_CENTS
+        copy_count = max(1, paper_risk // alert.trade_price_cents)
+        cost_cents = copy_count * alert.trade_price_cents
         print(f"  [PAPER] Would place: {copy_count} contracts {alert.trade_side.upper()} "
               f"@ {alert.trade_price_cents}c on {alert.market_ticker} "
-              f"(${cost_cents/100:.2f} = {int(config.PORTFOLIO_RISK_FRACTION*100)}% of ${balance_cents/100:.2f} balance)")
+              f"(${cost_cents/100:.2f} = ${paper_risk/100:.2f} copy trade)")
         return False, copy_count, cost_cents
 
     try:
@@ -287,7 +291,8 @@ def _city_from_ticker(ticker: str) -> str:
 
 
 def _build_scoreboard(trades: list) -> str:
-    """Build a 7-day running scoreboard from paper trades."""
+    """Build a 7-day running scoreboard from paper trades with $10 copy trade P&L."""
+    copy_amount = config.PAPER_COPY_AMOUNT_CENTS / 100  # $10 default
     total_pnl = sum(t.pnl_cents for t in trades)
     total_cost = sum(t.cost_cents for t in trades) or 1
     winners = [t for t in trades if t.pnl_cents > 0]
@@ -300,23 +305,26 @@ def _build_scoreboard(trades: list) -> str:
 
     lines = [
         f"{'='*30}",
-        f"7-DAY SCOREBOARD",
+        f"7-DAY SCOREBOARD (${copy_amount:.0f}/trade)",
         f"{'='*30}",
         f"",
         f"Total trades: {len(trades)} ({len(settled)} settled, {len(open_trades)} open)",
         f"Record: {len(winners)}W / {len(losers)}L",
         f"Win rate: {win_rate:.0f}%",
         f"Net P&L: ${total_pnl/100:+.2f} ({roi:+.1f}% ROI)",
+        f"Total deployed: ${copy_amount:.0f} x {len(trades)} = ${copy_amount * len(trades):.0f}",
     ]
 
     # Best and worst trade
     if settled:
         best = max(settled, key=lambda t: t.pnl_cents)
         worst = min(settled, key=lambda t: t.pnl_cents)
+        best_roi = (best.pnl_cents / max(best.cost_cents, 1)) * 100
+        worst_roi = (worst.pnl_cents / max(worst.cost_cents, 1)) * 100
         lines.append(f"")
-        lines.append(f"Best trade: ${best.pnl_cents/100:+.2f} — {_city_from_ticker(best.market_ticker)}")
+        lines.append(f"Best: ${best.pnl_cents/100:+.2f} ({best_roi:+.0f}%) — {_city_from_ticker(best.market_ticker)}")
         lines.append(f"  {best.market_title}")
-        lines.append(f"Worst trade: ${worst.pnl_cents/100:+.2f} — {_city_from_ticker(worst.market_ticker)}")
+        lines.append(f"Worst: ${worst.pnl_cents/100:+.2f} ({worst_roi:+.0f}%) — {_city_from_ticker(worst.market_ticker)}")
         lines.append(f"  {worst.market_title}")
 
     # City P&L breakdown
@@ -462,9 +470,10 @@ def main():
     """Main entry point — initialize and run the bot loop."""
     print("=" * 50)
     print("  ALFRED — KALSHI WHALE DETECTION SYSTEM")
-    print(f"  Mode: {'PAPER TRADING' if config.PAPER_TRADING else 'LIVE TRADING'}")
+    print(f"  Mode: {'PAPER TRADING' if config.PAPER_TRADING else 'LIVE TRADING'} (SNIPER)")
     print(f"  Threshold: {config.WHALE_THRESHOLD_MULTIPLIER}x average")
-    print(f"  Portfolio risk: {int(config.PORTFOLIO_RISK_FRACTION * 100)}% per trade")
+    print(f"  Min dollar size: ${config.WHALE_MIN_DOLLAR_SIZE:.0f}")
+    print(f"  Paper copy amount: ${config.PAPER_COPY_AMOUNT_CENTS/100:.2f}")
     print(f"  Poll interval: {config.POLL_INTERVAL_SECONDS}s")
     print(f"  Weather series: {', '.join(config.WEATHER_SERIES_TICKERS)}")
     print("=" * 50)
