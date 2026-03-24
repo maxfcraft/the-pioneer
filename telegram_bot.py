@@ -61,14 +61,6 @@ def send_whale_alert(alert: WhaleAlert, trade_placed: bool, paper_mode: bool,
     copy_count = max(1, copy_amount // alert.trade_price_cents)
     copy_cost_dollars = (copy_count * alert.trade_price_cents) / 100
 
-    # Calculate potential outcomes for the $10 copy
-    if alert.trade_side == "yes":
-        max_profit = copy_count * (100 - alert.trade_price_cents)  # cents
-        max_loss = copy_count * alert.trade_price_cents  # cents
-    else:
-        max_profit = copy_count * alert.trade_price_cents  # cents
-        max_loss = copy_count * (100 - alert.trade_price_cents)  # cents
-
     message = (
         f"Master Bruce, we have a whale.\n"
         f"\n"
@@ -87,11 +79,8 @@ def send_whale_alert(alert: WhaleAlert, trade_placed: bool, paper_mode: bool,
         f"Multiplier: {alert.multiplier}x average\n"
         f"Confidence: {alert.confidence_score}/100\n"
         f"\n"
-        f"${copy_amount/100:.0f} Copy Trade:\n"
-        f"  {copy_count} contracts @ {alert.trade_price_cents}c = ${copy_cost_dollars:.2f}\n"
-        f"  If whale is right: +${max_profit/100:.2f}\n"
-        f"  If whale is wrong: -${max_loss/100:.2f}\n"
-        f"Status: {trade_status}\n"
+        f"Paper Copy: {copy_count} contracts @ {alert.trade_price_cents}c = ${copy_cost_dollars:.2f}\n"
+        f"Tracking this. Results at 8 PM.\n"
         f"{'='*30}\n"
         f"\n"
         f"Some men aren't looking for anything logical.\n"
