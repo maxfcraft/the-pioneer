@@ -28,6 +28,9 @@ PAPER_COPY_AMOUNT_CENTS = int(os.getenv("PAPER_COPY_AMOUNT_CENTS", "1000"))  # $
 PORTFOLIO_RISK_FRACTION = float(os.getenv("PORTFOLIO_RISK_FRACTION", "0.15"))
 # Minimum trade size in cents to place (avoids dust trades)
 MIN_TRADE_SIZE_CENTS = int(os.getenv("MIN_TRADE_SIZE_CENTS", "100"))
+# Minimum contract price in cents to copy (filters out near-certain penny bets)
+# e.g. 10 = skip any contract priced under 10c (which implies 90%+ certainty on one side)
+MIN_COPY_PRICE_CENTS = int(os.getenv("MIN_COPY_PRICE_CENTS", "10"))
 
 # --- Bot Behavior ---
 # How often to poll markets (seconds)

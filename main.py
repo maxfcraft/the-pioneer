@@ -117,6 +117,10 @@ def copy_trade(client: KalshiClient, alert: WhaleAlert, balance_cents: int) -> t
     copy_count = max(1, risk_cents // alert.trade_price_cents)
     cost_cents = copy_count * alert.trade_price_cents
 
+    if alert.trade_price_cents < config.MIN_COPY_PRICE_CENTS:
+        print(f"  [SKIP] Contract price too low: {alert.trade_price_cents}c < {config.MIN_COPY_PRICE_CENTS}c minimum (near-certain bet)")
+        return False, 0, 0
+
     if cost_cents < config.MIN_TRADE_SIZE_CENTS:
         print(f"  [SKIP] Copy trade too small: {cost_cents}c < {config.MIN_TRADE_SIZE_CENTS}c minimum")
         return False, 0, 0
