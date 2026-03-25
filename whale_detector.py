@@ -6,6 +6,8 @@ trade whose contract count is >= WHALE_THRESHOLD_MULTIPLIER * rolling average.
 Also tracks volume spikes (sudden surges in trade frequency per market).
 """
 
+import json
+import os
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -57,6 +59,8 @@ class WhaleDetector:
         )
         # market_ticker -> set of trade IDs we already processed
         self.seen_trade_ids: dict[str, set] = defaultdict(set)
+        # Load previously seen trade IDs from disk (prevents re-alerting on restart)
+        self._load_seen_ids()
         # Recent near-miss trades (close to threshold but didn't trigger)
         self.last_near_misses: list = []
         # Volume tracking: market_ticker -> deque of new-trade-counts per scan
@@ -76,6 +80,30 @@ class WhaleDetector:
             "hottest_market": {"ticker": "", "title": "", "new_trades": 0},
         }
         self.hourly_near_misses: list = []
+
+    def _load_seen_ids(self):
+        """Load previously seen trade IDs from disk so restarts don't re-alert."""
+        path = config.SEEN_TRADES_FILE
+        if not os.path.exists(path):
+            return
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+            for ticker, ids in data.items():
+                self.seen_trade_ids[ticker] = set(ids)
+            total = sum(len(s) for s in self.seen_trade_ids.values())
+            print(f"  [MEMORY] Loaded {total} previously seen trade IDs across {len(data)} markets")
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"  [WARN] Could not load seen trades file: {e}")
+
+    def _save_seen_ids(self):
+        """Persist seen trade IDs to disk."""
+        data = {ticker: list(ids) for ticker, ids in self.seen_trade_ids.items()}
+        try:
+            with open(config.SEEN_TRADES_FILE, "w") as f:
+                json.dump(data, f)
+        except OSError as e:
+            print(f"  [WARN] Could not save seen trades file: {e}")
 
     def _calculate_rolling_average(self, ticker: str) -> float:
         """Calculate the average trade size for a market's rolling window."""
@@ -230,6 +258,10 @@ class WhaleDetector:
             }
 
         self.hourly_stats["trades_analyzed"] += new_trade_count
+
+        # Persist seen IDs to disk after processing each market
+        if new_trade_count > 0:
+            self._save_seen_ids()
 
         return alerts
 

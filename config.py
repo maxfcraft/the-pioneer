@@ -40,6 +40,8 @@ PAPER_TRADING = os.getenv("PAPER_TRADING", "true").lower() == "true"
 
 # --- Logging ---
 TRADE_LOG_FILE = os.getenv("TRADE_LOG_FILE", "whale_trades.csv")
+# File to persist seen trade IDs across restarts (prevents duplicate alerts)
+SEEN_TRADES_FILE = os.getenv("SEEN_TRADES_FILE", "seen_trades.json")
 
 # --- Market Filter ---
 # Comma-separated series tickers to monitor on Kalshi.
