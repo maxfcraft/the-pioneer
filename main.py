@@ -118,7 +118,11 @@ def copy_trade(client: KalshiClient, alert: WhaleAlert, balance_cents: int) -> t
     cost_cents = copy_count * alert.trade_price_cents
 
     if alert.trade_price_cents < config.MIN_COPY_PRICE_CENTS:
-        print(f"  [SKIP] Contract price too low: {alert.trade_price_cents}c < {config.MIN_COPY_PRICE_CENTS}c minimum (near-certain bet)")
+        print(f"  [SKIP] Contract price too low: {alert.trade_price_cents}c < {config.MIN_COPY_PRICE_CENTS}c minimum (penny bet)")
+        return False, 0, 0
+
+    if alert.trade_price_cents > config.MAX_COPY_PRICE_CENTS:
+        print(f"  [SKIP] Contract price too high: {alert.trade_price_cents}c > {config.MAX_COPY_PRICE_CENTS}c maximum (near-certainty, bad R/R)")
         return False, 0, 0
 
     if cost_cents < config.MIN_TRADE_SIZE_CENTS:
@@ -199,6 +203,15 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
         alerts = detector.process_trades(ticker, trades, title)
 
         for alert in alerts:
+            # Pre-filter: skip penny bets and near-certainty trades entirely
+            # (no alert, no log, no noise — only real signals get through)
+            if alert.trade_price_cents < config.MIN_COPY_PRICE_CENTS:
+                print(f"  [FILTERED] {alert.market_ticker} @ {alert.trade_price_cents}c — penny bet, skipping entirely")
+                continue
+            if alert.trade_price_cents > config.MAX_COPY_PRICE_CENTS:
+                print(f"  [FILTERED] {alert.market_ticker} @ {alert.trade_price_cents}c — near-certainty, skipping entirely")
+                continue
+
             total_whales += 1
             print(f"\n  WHALE DETECTED in {alert.market_ticker}")
             print(f"    Size: {alert.trade_count} contracts ({alert.multiplier}x avg)")
@@ -477,6 +490,7 @@ def main():
     print(f"  Mode: {'PAPER TRADING' if config.PAPER_TRADING else 'LIVE TRADING'} (SNIPER)")
     print(f"  Threshold: {config.WHALE_THRESHOLD_MULTIPLIER}x average")
     print(f"  Min dollar size: ${config.WHALE_MIN_DOLLAR_SIZE:.0f}")
+    print(f"  Price range: {config.MIN_COPY_PRICE_CENTS}c - {config.MAX_COPY_PRICE_CENTS}c (filters penny bets + near-certainties)")
     print(f"  Paper copy amount: ${config.PAPER_COPY_AMOUNT_CENTS/100:.2f}")
     print(f"  Poll interval: {config.POLL_INTERVAL_SECONDS}s")
     print(f"  Weather series: {', '.join(config.WEATHER_SERIES_TICKERS)}")

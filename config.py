@@ -31,6 +31,9 @@ MIN_TRADE_SIZE_CENTS = int(os.getenv("MIN_TRADE_SIZE_CENTS", "100"))
 # Minimum contract price in cents to copy (filters out near-certain penny bets)
 # e.g. 10 = skip any contract priced under 10c (which implies 90%+ certainty on one side)
 MIN_COPY_PRICE_CENTS = int(os.getenv("MIN_COPY_PRICE_CENTS", "10"))
+# Maximum contract price in cents to copy (filters out near-certainty trades)
+# e.g. 90 = skip any contract priced above 90c (risk 90c to make 10c = terrible R/R)
+MAX_COPY_PRICE_CENTS = int(os.getenv("MAX_COPY_PRICE_CENTS", "90"))
 
 # --- Bot Behavior ---
 # How often to poll markets (seconds)

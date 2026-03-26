@@ -18,6 +18,38 @@ import config
 PAPER_TRADES_FILE = "paper_trades.json"
 
 
+def _extract_yes_price_cents(market: dict, fallback: int) -> int:
+    """
+    Extract the current YES price in cents from a Kalshi market response.
+
+    The Kalshi API v2 uses various field names depending on the endpoint.
+    This tries them all and handles both cents (int) and dollar (float/str) formats.
+    """
+    # Try field names in order of reliability
+    for field in ("yes_bid", "yes_price", "last_price", "previous_yes_bid", "previous_price"):
+        val = market.get(field)
+        if val is None:
+            continue
+        # Handle string values (e.g. "0.98" or "98")
+        if isinstance(val, str):
+            try:
+                val = float(val)
+            except ValueError:
+                continue
+        # If value looks like dollars (0.0 - 1.0), convert to cents
+        if isinstance(val, float) and val <= 1.0:
+            result = int(round(val * 100))
+            print(f"  [PRICE] {market.get('ticker', '?')}: {field}={market.get(field)} -> {result}c")
+            return result
+        # Already in cents
+        print(f"  [PRICE] {market.get('ticker', '?')}: {field}={val} -> {int(val)}c")
+        return int(val)
+    # Debug: show what fields ARE available so we can fix
+    price_fields = {k: v for k, v in market.items() if "price" in k.lower() or "bid" in k.lower() or "ask" in k.lower()}
+    print(f"  [PRICE WARN] No known price field found for {market.get('ticker', '?')}. Available: {price_fields}")
+    return fallback
+
+
 def _central_today() -> str:
     """Get today's date string in Central Time (handles UTC offset correctly)."""
     utc_offset = config.MORNING_REPORT_UTC_OFFSET  # -5 for CDT, -6 for CST
@@ -113,11 +145,10 @@ class PaperTradeTracker:
                     elif result == "no":
                         current_price = 0
                     else:
-                        current_price = market.get("yes_price", market.get("last_price", trade.entry_price_cents))
+                        current_price = _extract_yes_price_cents(market, trade.entry_price_cents)
                     trade.resolved = True
                 else:
-                    # Still open: use current yes_price
-                    current_price = market.get("yes_price", market.get("last_price", trade.entry_price_cents))
+                    current_price = _extract_yes_price_cents(market, trade.entry_price_cents)
 
                 trade.exit_price_cents = current_price
                 trade.checked_at = datetime.now(timezone.utc).isoformat()
@@ -155,10 +186,10 @@ class PaperTradeTracker:
                 elif result == "no":
                     current_price = 0
                 else:
-                    current_price = market.get("yes_price", market.get("last_price", trade.entry_price_cents))
+                    current_price = _extract_yes_price_cents(market, trade.entry_price_cents)
                 trade.resolved = True
             else:
-                current_price = market.get("yes_price", market.get("last_price", trade.entry_price_cents))
+                current_price = _extract_yes_price_cents(market, trade.entry_price_cents)
 
             trade.exit_price_cents = current_price
             trade.checked_at = datetime.now(timezone.utc).isoformat()
