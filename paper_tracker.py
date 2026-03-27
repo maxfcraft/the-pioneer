@@ -25,10 +25,16 @@ def _extract_yes_price_cents(market: dict, fallback: int) -> int:
     The Kalshi API v2 uses various field names depending on the endpoint.
     This tries them all and handles both cents (int) and dollar (float/str) formats.
     """
-    # Try field names in order of reliability
-    for field in ("yes_bid", "yes_price", "last_price", "previous_yes_bid", "previous_price"):
-        val = market.get(field)
-        if val is None:
+    # Try every known Kalshi price field name (v2 and v3 variants)
+    price_fields = (
+        "yes_bid", "yes_ask", "yes_price",
+        "last_price", "last_yes_price",
+        "previous_yes_bid", "previous_yes_ask", "previous_price",
+        "yes_sub_title", "close_price",
+    )
+    for fname in price_fields:
+        val = market.get(fname)
+        if val is None or val == "" or val == 0:
             continue
         # Handle string values (e.g. "0.98" or "98")
         if isinstance(val, str):
@@ -36,17 +42,21 @@ def _extract_yes_price_cents(market: dict, fallback: int) -> int:
                 val = float(val)
             except ValueError:
                 continue
-        # If value looks like dollars (0.0 - 1.0), convert to cents
-        if isinstance(val, float) and val <= 1.0:
+        # If value looks like dollars (0.0 - 1.0 range), convert to cents
+        if isinstance(val, (int, float)) and 0 < val <= 1.0:
             result = int(round(val * 100))
-            print(f"  [PRICE] {market.get('ticker', '?')}: {field}={market.get(field)} -> {result}c")
+            print(f"  [PRICE] {market.get('ticker', '?')}: {fname}={market.get(fname)} -> {result}c")
             return result
-        # Already in cents
-        print(f"  [PRICE] {market.get('ticker', '?')}: {field}={val} -> {int(val)}c")
-        return int(val)
-    # Debug: show what fields ARE available so we can fix
-    price_fields = {k: v for k, v in market.items() if "price" in k.lower() or "bid" in k.lower() or "ask" in k.lower()}
-    print(f"  [PRICE WARN] No known price field found for {market.get('ticker', '?')}. Available: {price_fields}")
+        # Value > 1 means already in cents
+        if isinstance(val, (int, float)) and val > 1:
+            print(f"  [PRICE] {market.get('ticker', '?')}: {fname}={val} -> {int(val)}c")
+            return int(val)
+    # Debug: dump ALL keys so we can identify the correct field
+    all_keys = list(market.keys())
+    price_related = {k: market[k] for k in all_keys if any(w in k.lower() for w in ("price", "bid", "ask", "yes", "no", "last"))}
+    print(f"  [PRICE WARN] No price field found for {market.get('ticker', '?')}")
+    print(f"  [PRICE WARN] All keys: {all_keys}")
+    print(f"  [PRICE WARN] Price-related: {price_related}")
     return fallback
 
 
@@ -176,6 +186,16 @@ class PaperTradeTracker:
         try:
             market_data = client.get_market(trade.market_ticker)
             market = market_data.get("market", market_data)
+
+            # DEBUG: Dump raw API response to file so we can see exact field names
+            debug_file = "debug_market_response.json"
+            if not os.path.exists(debug_file):
+                try:
+                    with open(debug_file, "w") as df:
+                        json.dump({"raw_response": market_data, "extracted_market": market}, df, indent=2, default=str)
+                    print(f"  [DEBUG] Dumped raw market response to {debug_file}")
+                except Exception:
+                    pass
 
             status = market.get("status", "")
             result = market.get("result", "")
