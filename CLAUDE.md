@@ -1,60 +1,52 @@
-# CLAUDE.md — The Auburn Blueprint
+
+# CLAUDE.md — Max Fayrweather
 
 ## Who I Am
 - Name: Max Fayrweather
-- Fresham Student at Auburn University
-- Founder of The Auburn Blueprint with my business partner (https://whop.com/joined/auburnblueprint/)
-- Windows user, Claude Pro plan
-
-## The Business
-- **Platform**: Whop.com
-- **Product**: Course + community helping incoming Auburn students/families navigate Auburn
-- **Free tier**: Camp War Eagle & Registration Guide (49 members)
-- **Paid tier**: Auburn Blueprint Full Course ($50) — covers scheduling, Rate My Professor, housing (on/off campus), transportation (Tiger Transit), football tickets Nobody has joined yetstarting to market it now.
-- **Content format**: Video lessons (multimedia) + PDFs + community chat
-- **Current size**: 50 members
-- **Revenue model**: One-time $50 course purchase + potential upsells
-
-## Course Modules (Current)
-1. FULL Camp War Eagle Guide (1 chapter, 4 lessons, 6 min)
-2. Making the Perfect Schedule (1 chapter, 6 lessons, 18 min) — includes Tiger Scheduler demo, Rate My Professor breakdown
-3. Transportation / Tiger Transit (1 chapter, 8 lessons, 20 min)
-4. On Campus Housing (1 chapter, 2 lessons, 4 min)
-5. Off Campus Housing (1 chapter, 7 lessons, 29 min)
-6. Football Tickets (1 chapter, 2 lessons, 6 min)
-
-## Goals & Projects
-### 1. Scale The Auburn Blueprint
-- Grow membership and revenue
-- Automate content creation pipeline
-- Improve marketing (social media, SEO, referral)
-- Add new modules as needed (dining, Greek life, study spots, etc.)
-
-### 2. Kalshi Trading Bot (Build)
-- Monitor Kalshi prediction markets (especially weather markets)
-- Detect large positions ("whale" trades / someone going all-in)
-- Copy-trade automatically or alert via Telegram bot
-- Tech stack TBD — likely Python, Kalshi API, Telegram Bot API
-
-### 3. Academic Automation
-- Help with coursework, study materials, scheduling
-- Organize notes and assignments
-
-## Preferences
-- Communication style: Direct, knowledgeable, structured, no emojis
-- Math help: Teach clearly, show where I went wrong first, then fix, then continue
-- Code: Explain what you are building and why before writing it
-- Always think about scalability and automation
-- I want to be at the forefront of AI tooling — push me toward best practices and always tell me if this will make me print and make money tell me if something isnt the smartest and what is the smartest way to make the money.
-
-  ## History
-  - Created a pressurewashing business 2 years ago and pushed it to 5k + making 1.5k in 5 days one time until I had to go to auburn university college.
-  - Did tiktokshop for 4 months and had brand deals getting payed for 30 videos 1kish for 4 months each
-  - Big entrepreneur with goals to drop out of college and go live isolated by the beach in bali or in the swizz or italian alps
-
-## Tech Context
+- Freshman at Auburn University
+- Founder: The Auburn Blueprint (https://whop.com/joined/auburnblueprint/)
 - OS: Windows
-- Platform: Whop.com for course hosting
-- Familiar with: Basic business operations, content creation, marketing, business basics and more.
-- Learning: Programming, API integrations, AI automation
-- Subscriptions: Claude Pro ($20/mo) 
+- Plan: Claude Pro ($20/mo) — upgrading to Max soon
+
+---
+
+## Active Businesses
+
+### The Auburn Blueprint
+- Platform: Whop.com
+- Free tier: Camp War Eagle & Registration Guide (49 members)
+- Paid tier: Full Course — $50 one-time (0 paid members, now marketing)
+- Current total: ~50 members
+- Modules: Camp War Eagle, Scheduling, Tiger Transit, On-Campus Housing, Off-Campus Housing, Football Tickets
+- Goal: Scale paid members, automate content, add modules (dining, Greek life, study spots)
+
+### App Building (New)
+- Tool: Rork Max ($200/mo) — mobile apps, App Store
+- OS limitation: Windows — use TestFlight for device testing
+- Apple Developer Account: $99/yr required
+- Claude role: Ideation, prompts, App Store copy, strategy
+
+### Kalshi Trading Bot (Planned)
+- Goal: Monitor prediction markets, detect whale trades, copy-trade or alert via Telegram
+- Stack: Python, Kalshi API, Telegram Bot API
+
+---
+
+## Background
+- Pressure washing business — scaled to $5k, made $1.5k in 5 days
+- TikTok Shop — 4 months, brand deals, ~$1k/month for 30 videos/month
+- Strong instinct for business, content, and marketing
+- Learning: programming, API integrations, AI automation
+- End goal: Drop out, live in Bali, Swiss Alps, or Italian coast
+
+---
+
+## How I Work With Claude
+
+- Direct, structured, no emojis
+- Math: Show where I went wrong first, then fix, then continue
+- Code: Explain what you're building and why before writing it
+- Always flag if something is a bad use of money or time
+- Always push the highest-leverage, fastest path to revenue
+- Think scalability and automation first
+- If something will make money, say it clearly. If it won't, say that too.
