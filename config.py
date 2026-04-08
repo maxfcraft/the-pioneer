@@ -19,7 +19,8 @@ WHALE_THRESHOLD_MULTIPLIER = float(os.getenv("WHALE_THRESHOLD_MULTIPLIER", "25")
 # Number of recent trades used to calculate the rolling average
 ROLLING_WINDOW_SIZE = int(os.getenv("ROLLING_WINDOW_SIZE", "100"))
 # Minimum total dollar size to even consider a trade (filters minnows)
-WHALE_MIN_DOLLAR_SIZE = float(os.getenv("WHALE_MIN_DOLLAR_SIZE", "50"))
+# $200 = only whales putting up real money, not noise
+WHALE_MIN_DOLLAR_SIZE = float(os.getenv("WHALE_MIN_DOLLAR_SIZE", "200"))
 # Fixed dollar amount for paper copy trades (hypothetical "what if I copied with $X")
 PAPER_COPY_AMOUNT_CENTS = int(os.getenv("PAPER_COPY_AMOUNT_CENTS", "1000"))  # $10
 
@@ -28,12 +29,15 @@ PAPER_COPY_AMOUNT_CENTS = int(os.getenv("PAPER_COPY_AMOUNT_CENTS", "1000"))  # $
 PORTFOLIO_RISK_FRACTION = float(os.getenv("PORTFOLIO_RISK_FRACTION", "0.15"))
 # Minimum trade size in cents to place (avoids dust trades)
 MIN_TRADE_SIZE_CENTS = int(os.getenv("MIN_TRADE_SIZE_CENTS", "100"))
-# Minimum contract price in cents to copy (filters out near-certain penny bets)
-# e.g. 10 = skip any contract priced under 10c (which implies 90%+ certainty on one side)
-MIN_COPY_PRICE_CENTS = int(os.getenv("MIN_COPY_PRICE_CENTS", "10"))
+# Minimum contract price in cents to copy (filters out extreme longshots)
+# 15c = skip anything under 15c (too speculative, low hit rate)
+MIN_COPY_PRICE_CENTS = int(os.getenv("MIN_COPY_PRICE_CENTS", "15"))
 # Maximum contract price in cents to copy (filters out near-certainty trades)
-# e.g. 90 = skip any contract priced above 90c (risk 90c to make 10c = terrible R/R)
-MAX_COPY_PRICE_CENTS = int(os.getenv("MAX_COPY_PRICE_CENTS", "90"))
+# 80c = skip anything over 80c (risk 80c to make 20c = terrible risk/reward)
+MAX_COPY_PRICE_CENTS = int(os.getenv("MAX_COPY_PRICE_CENTS", "80"))
+# Minimum confidence score (0-100) to copy a whale trade
+# 50 = skip low-confidence signals (thin history, small dollar, barely over threshold)
+MIN_CONFIDENCE_SCORE = float(os.getenv("MIN_CONFIDENCE_SCORE", "50"))
 
 # --- Bot Behavior ---
 # How often to poll markets (seconds)

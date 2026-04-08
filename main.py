@@ -203,13 +203,16 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
         alerts = detector.process_trades(ticker, trades, title)
 
         for alert in alerts:
-            # Pre-filter: skip penny bets and near-certainty trades entirely
-            # (no alert, no log, no noise — only real signals get through)
+            # SNIPER PRE-FILTER: only high-quality signals get through
+            # (no alert, no log, no noise — surgical precision only)
             if alert.trade_price_cents < config.MIN_COPY_PRICE_CENTS:
-                print(f"  [FILTERED] {alert.market_ticker} @ {alert.trade_price_cents}c — penny bet, skipping entirely")
+                print(f"  [FILTERED] {alert.market_ticker} @ {alert.trade_price_cents}c — longshot, skipping")
                 continue
             if alert.trade_price_cents > config.MAX_COPY_PRICE_CENTS:
-                print(f"  [FILTERED] {alert.market_ticker} @ {alert.trade_price_cents}c — near-certainty, skipping entirely")
+                print(f"  [FILTERED] {alert.market_ticker} @ {alert.trade_price_cents}c — bad R/R, skipping")
+                continue
+            if alert.confidence_score < config.MIN_CONFIDENCE_SCORE:
+                print(f"  [FILTERED] {alert.market_ticker} conf={alert.confidence_score} — below {config.MIN_CONFIDENCE_SCORE} floor, skipping")
                 continue
 
             total_whales += 1
@@ -490,7 +493,8 @@ def main():
     print(f"  Mode: {'PAPER TRADING' if config.PAPER_TRADING else 'LIVE TRADING'} (SNIPER)")
     print(f"  Threshold: {config.WHALE_THRESHOLD_MULTIPLIER}x average")
     print(f"  Min dollar size: ${config.WHALE_MIN_DOLLAR_SIZE:.0f}")
-    print(f"  Price range: {config.MIN_COPY_PRICE_CENTS}c - {config.MAX_COPY_PRICE_CENTS}c (filters penny bets + near-certainties)")
+    print(f"  Price range: {config.MIN_COPY_PRICE_CENTS}c - {config.MAX_COPY_PRICE_CENTS}c")
+    print(f"  Min confidence: {config.MIN_CONFIDENCE_SCORE}/100")
     print(f"  Paper copy amount: ${config.PAPER_COPY_AMOUNT_CENTS/100:.2f}")
     print(f"  Poll interval: {config.POLL_INTERVAL_SECONDS}s")
     print(f"  Weather series: {', '.join(config.WEATHER_SERIES_TICKERS)}")
