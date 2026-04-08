@@ -18,45 +18,27 @@ import config
 PAPER_TRADES_FILE = "paper_trades.json"
 
 
-def _extract_yes_price_cents(market: dict, fallback: int) -> int:
+def _get_current_price_via_trades(client, ticker: str, fallback: int) -> int:
     """
-    Extract the current YES price in cents from a Kalshi market response.
+    Get the current YES price in cents by fetching the most recent trade.
 
-    The Kalshi API v2 uses various field names depending on the endpoint.
-    This tries them all and handles both cents (int) and dollar (float/str) formats.
+    The market endpoint field names don't match any known Kalshi v2 fields,
+    but the trades endpoint returns `yes_price_dollars` which we KNOW works
+    (it's the same field whale_detector.py uses successfully).
     """
-    # Try every known Kalshi price field name (v2 and v3 variants)
-    price_fields = (
-        "yes_bid", "yes_ask", "yes_price",
-        "last_price", "last_yes_price",
-        "previous_yes_bid", "previous_yes_ask", "previous_price",
-        "yes_sub_title", "close_price",
-    )
-    for fname in price_fields:
-        val = market.get(fname)
-        if val is None or val == "" or val == 0:
-            continue
-        # Handle string values (e.g. "0.98" or "98")
-        if isinstance(val, str):
-            try:
-                val = float(val)
-            except ValueError:
-                continue
-        # If value looks like dollars (0.0 - 1.0 range), convert to cents
-        if isinstance(val, (int, float)) and 0 < val <= 1.0:
-            result = int(round(val * 100))
-            print(f"  [PRICE] {market.get('ticker', '?')}: {fname}={market.get(fname)} -> {result}c")
-            return result
-        # Value > 1 means already in cents
-        if isinstance(val, (int, float)) and val > 1:
-            print(f"  [PRICE] {market.get('ticker', '?')}: {fname}={val} -> {int(val)}c")
-            return int(val)
-    # Debug: dump ALL keys so we can identify the correct field
-    all_keys = list(market.keys())
-    price_related = {k: market[k] for k in all_keys if any(w in k.lower() for w in ("price", "bid", "ask", "yes", "no", "last"))}
-    print(f"  [PRICE WARN] No price field found for {market.get('ticker', '?')}")
-    print(f"  [PRICE WARN] All keys: {all_keys}")
-    print(f"  [PRICE WARN] Price-related: {price_related}")
+    try:
+        trades_data = client.get_trades(ticker, limit=1)
+        trades = trades_data.get("trades", [])
+        if trades:
+            trade = trades[0]
+            price_raw = trade.get("yes_price_dollars", trade.get("yes_price", None))
+            if price_raw is not None:
+                price_cents = int(float(price_raw) * 100)
+                print(f"  [PRICE] {ticker}: yes_price_dollars={price_raw} -> {price_cents}c")
+                return price_cents
+        print(f"  [PRICE WARN] No recent trades found for {ticker}")
+    except Exception as e:
+        print(f"  [PRICE WARN] Could not fetch trades for {ticker}: {e}")
     return fallback
 
 
@@ -141,33 +123,33 @@ class PaperTradeTracker:
             if trade.resolved:
                 continue
             try:
+                # First check if market has settled via market endpoint
                 market_data = client.get_market(trade.market_ticker)
                 market = market_data.get("market", market_data)
-
-                # Check if market has settled
                 status = market.get("status", "")
                 result = market.get("result", "")
 
                 if status == "settled" or result:
-                    # Market resolved: yes=100c, no=0c (or vice versa)
                     if result == "yes":
                         current_price = 100
                     elif result == "no":
                         current_price = 0
                     else:
-                        current_price = _extract_yes_price_cents(market, trade.entry_price_cents)
+                        # Settled but no clear result — get price from trades
+                        current_price = _get_current_price_via_trades(
+                            client, trade.market_ticker, trade.entry_price_cents)
                     trade.resolved = True
                 else:
-                    current_price = _extract_yes_price_cents(market, trade.entry_price_cents)
+                    # Open market — use trades endpoint (proven to work)
+                    current_price = _get_current_price_via_trades(
+                        client, trade.market_ticker, trade.entry_price_cents)
 
                 trade.exit_price_cents = current_price
                 trade.checked_at = datetime.now(timezone.utc).isoformat()
 
-                # Calculate P&L
                 if trade.side == "yes":
                     pnl_per_contract = current_price - trade.entry_price_cents
                 else:
-                    # For "no" side: you profit when price goes down
                     pnl_per_contract = trade.entry_price_cents - current_price
 
                 trade.pnl_cents = pnl_per_contract * trade.contract_count
@@ -184,19 +166,9 @@ class PaperTradeTracker:
     def check_single_trade(self, trade: PaperTrade, client) -> PaperTrade | None:
         """Check the current price of a single trade for follow-up reporting."""
         try:
+            # Check settlement status via market endpoint
             market_data = client.get_market(trade.market_ticker)
             market = market_data.get("market", market_data)
-
-            # DEBUG: Dump raw API response to file so we can see exact field names
-            debug_file = "debug_market_response.json"
-            if not os.path.exists(debug_file):
-                try:
-                    with open(debug_file, "w") as df:
-                        json.dump({"raw_response": market_data, "extracted_market": market}, df, indent=2, default=str)
-                    print(f"  [DEBUG] Dumped raw market response to {debug_file}")
-                except Exception:
-                    pass
-
             status = market.get("status", "")
             result = market.get("result", "")
 
@@ -206,10 +178,13 @@ class PaperTradeTracker:
                 elif result == "no":
                     current_price = 0
                 else:
-                    current_price = _extract_yes_price_cents(market, trade.entry_price_cents)
+                    current_price = _get_current_price_via_trades(
+                        client, trade.market_ticker, trade.entry_price_cents)
                 trade.resolved = True
             else:
-                current_price = _extract_yes_price_cents(market, trade.entry_price_cents)
+                # Open market — use trades endpoint (proven to work)
+                current_price = _get_current_price_via_trades(
+                    client, trade.market_ticker, trade.entry_price_cents)
 
             trade.exit_price_cents = current_price
             trade.checked_at = datetime.now(timezone.utc).isoformat()
