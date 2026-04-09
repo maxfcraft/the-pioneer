@@ -185,6 +185,13 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
     total_whales = 0
     total_trades = 0
 
+    # One-trade-per-ticker guard: track which tickers we've already copied today
+    # to avoid double-exposure when multiple whales hit the same market
+    today_copied_tickers = set()
+    if paper_tracker:
+        for t in paper_tracker.get_today_trades():
+            today_copied_tickers.add(t.market_ticker)
+
     for market in markets:
         ticker = market.get("ticker", "")
         title = market.get("title", ticker)
@@ -214,6 +221,9 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
             if alert.confidence_score < config.MIN_CONFIDENCE_SCORE:
                 print(f"  [FILTERED] {alert.market_ticker} conf={alert.confidence_score} — below {config.MIN_CONFIDENCE_SCORE} floor, skipping")
                 continue
+            if alert.market_ticker in today_copied_tickers:
+                print(f"  [FILTERED] {alert.market_ticker} — already have a position today, no double-exposure")
+                continue
 
             total_whales += 1
             print(f"\n  WHALE DETECTED in {alert.market_ticker}")
@@ -236,6 +246,7 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
                     multiplier=alert.multiplier,
                     confidence=alert.confidence_score,
                 )
+                today_copied_tickers.add(alert.market_ticker)
                 # Tell them the codename
                 _send_message(
                     f"This trade is designated {recorded_trade.codename}.\n"

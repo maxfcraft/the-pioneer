@@ -53,8 +53,8 @@ SEEN_TRADES_FILE = os.getenv("SEEN_TRADES_FILE", "seen_trades.json")
 # --- Market Filter ---
 # Comma-separated series tickers to monitor on Kalshi.
 # These are queried directly via the API's series_ticker parameter.
-# Daily high temps (4 cities):
-#   KXHIGHNY (NYC), KXHIGHCHI (Chicago), KXHIGHMIA (Miami), KXHIGHAUS (Austin)
+# Daily high temps (3 profitable cities — Miami removed, consistently -P&L):
+#   KXHIGHNY (NYC), KXHIGHCHI (Chicago), KXHIGHAUS (Austin)
 # Precipitation & storms:
 #   KXRAIN (rainfall), KXSNOW (snowfall), KXWIND (wind)
 # Broader weather:
@@ -63,7 +63,7 @@ WEATHER_SERIES_TICKERS = [
     s.strip() for s in
     os.getenv(
         "WEATHER_SERIES",
-        "KXHIGHNY,KXHIGHCHI,KXHIGHMIA,KXHIGHAUS,"
+        "KXHIGHNY,KXHIGHCHI,KXHIGHAUS,"
         "KXTEMP,KXHMONTHRANGE,"
         "KXRAIN,KXSNOW,KXWIND,KXWEATH"
     ).split(",")
