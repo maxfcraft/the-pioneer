@@ -188,9 +188,16 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
     # One-trade-per-ticker guard: track which tickers we've already copied today
     # to avoid double-exposure when multiple whales hit the same market
     today_copied_tickers = set()
+    today_pnl_cents = 0
     if paper_tracker:
         for t in paper_tracker.get_today_trades():
             today_copied_tickers.add(t.market_ticker)
+            today_pnl_cents += t.pnl_cents
+
+    # Daily loss limit: if we're already down more than the limit, stop trading today
+    if today_pnl_cents < -config.DAILY_MAX_LOSS_CENTS:
+        print(f"  [KILL SWITCH] Daily loss limit hit (${today_pnl_cents/100:.2f}). No more trades today.")
+        return
 
     for market in markets:
         ticker = market.get("ticker", "")
