@@ -40,8 +40,8 @@ MIN_COPY_PRICE_CENTS = int(os.getenv("MIN_COPY_PRICE_CENTS", "15"))
 # 80c = skip anything over 80c (risk 80c to make 20c = terrible risk/reward)
 MAX_COPY_PRICE_CENTS = int(os.getenv("MAX_COPY_PRICE_CENTS", "80"))
 # Minimum confidence score (0-100) to copy a whale trade
-# 50 = skip low-confidence signals (thin history, small dollar, barely over threshold)
-MIN_CONFIDENCE_SCORE = float(os.getenv("MIN_CONFIDENCE_SCORE", "50"))
+# 65 = only high-confidence signals (data shows 75% WR above 60 vs 57% below)
+MIN_CONFIDENCE_SCORE = float(os.getenv("MIN_CONFIDENCE_SCORE", "65"))
 
 # --- Bot Behavior ---
 # How often to poll markets (seconds)
