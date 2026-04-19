@@ -25,9 +25,11 @@ WHALE_MIN_DOLLAR_SIZE = float(os.getenv("WHALE_MIN_DOLLAR_SIZE", "200"))
 PAPER_COPY_AMOUNT_CENTS = int(os.getenv("PAPER_COPY_AMOUNT_CENTS", "1000"))  # $10
 
 # --- Trading ---
+# What percentage of portfolio balance to risk per live whale trade (0.15 = 15%)
+# With $50 balance: 15% = $7.50 per trade
+PORTFOLIO_RISK_FRACTION = float(os.getenv("PORTFOLIO_RISK_FRACTION", "0.15"))
 # Maximum loss allowed per day in cents before the bot stops trading
-# e.g. 2000 = stop trading if we lose more than $20 in one day
-# This is your hard stop-loss. Set it to ~40% of your daily starting bankroll.
+# $20 = hard stop-loss, bot pauses trading for the rest of the day
 DAILY_MAX_LOSS_CENTS = int(os.getenv("DAILY_MAX_LOSS_CENTS", "2000"))  # $20
 # Minimum trade size in cents to place (avoids dust trades)
 MIN_TRADE_SIZE_CENTS = int(os.getenv("MIN_TRADE_SIZE_CENTS", "100"))
