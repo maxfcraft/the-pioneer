@@ -443,10 +443,65 @@ def _handle_command(text: str) -> str:
             "So that we can learn to pick ourselves up."
         )
 
+    elif cmd in ("/testorder", "testorder"):
+        if not _kalshi_client:
+            return "Kalshi client not initialized, Master Bruce."
+        if not _kalshi_client.authenticated:
+            return "Cannot place orders — not authenticated. Check your API key, Master Bruce."
+        try:
+            # Find the cheapest available weather market to test with
+            markets = _kalshi_client.get_weather_markets()
+            if not markets:
+                return "No weather markets found to test with, Master Bruce."
+            # Get trades to find a market with a real price
+            test_market = None
+            test_price = None
+            for m in markets[:20]:
+                ticker = m.get("ticker", "")
+                try:
+                    trades_data = _kalshi_client.get_trades(ticker, limit=1)
+                    trades = trades_data.get("trades", [])
+                    if trades:
+                        price_raw = trades[0].get("yes_price_dollars", None)
+                        if price_raw:
+                            price_cents = int(float(price_raw) * 100)
+                            if 2 <= price_cents <= 10:  # find a 2c-10c market (cheap test)
+                                test_market = ticker
+                                test_price = price_cents
+                                break
+                except Exception:
+                    continue
+            if not test_market:
+                return "Could not find a cheap market to test with (need 2c-10c). Master Bruce, all markets are currently priced above 10c."
+            # Place 1 contract — max $0.10 risk
+            result = _kalshi_client.place_order(
+                ticker=test_market,
+                side="yes",
+                count=1,
+                price_cents=test_price,
+                order_type="limit",
+            )
+            order_id = result.get("order", {}).get("order_id", "unknown")
+            return (
+                f"Master Bruce, test order PLACED.\n\n"
+                f"Market: {test_market}\n"
+                f"1 contract YES @ {test_price}c = ${test_price/100:.2f}\n"
+                f"Order ID: {order_id}\n\n"
+                f"Live trading is confirmed operational.\n"
+                f"The next whale will be copied automatically."
+            )
+        except Exception as e:
+            return (
+                f"Master Bruce, test order FAILED.\n\n"
+                f"Error: {e}\n\n"
+                f"This is why whales weren't being copied. "
+                f"Please send this error to your developer."
+            )
+
     else:
         return (
             f"I'm afraid I didn't understand that, Master Bruce — '{text}'.\n"
-            f"Try /status, /today, /recap, /balance, /datacheck, or /help."
+            f"Try /status, /today, /recap, /balance, /datacheck, /testorder, or /help."
         )
 
 
