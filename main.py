@@ -242,8 +242,9 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
             send_whale_alert(alert, trade_placed, config.PAPER_TRADING, balance_cents)
             log_whale(alert, trade_placed, copy_count)
 
-            # Record paper trade for outcome tracking + schedule 1hr follow-up
-            if config.PAPER_TRADING and paper_tracker and copy_count > 0:
+            # Record trade for tracking + add to duplicate guard + schedule follow-up
+            # Works in BOTH paper and live mode
+            if paper_tracker and copy_count > 0:
                 recorded_trade = paper_tracker.record_trade(
                     ticker=alert.market_ticker,
                     title=alert.market_title,
@@ -254,12 +255,10 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
                     confidence=alert.confidence_score,
                 )
                 today_copied_tickers.add(alert.market_ticker)
-                # Tell them the codename
                 _send_message(
                     f"This trade is designated {recorded_trade.codename}.\n"
                     f"I'll check back in 1 hour with a status report."
                 )
-                # Schedule the 1-hour follow-up
                 trade_idx = len(paper_tracker.trades) - 1
                 schedule_trade_followup(client, paper_tracker, trade_idx, alert.trade_price_cents)
                 print(f"  [FOLLOWUP] Scheduled 1hr check for {recorded_trade.codename}")
