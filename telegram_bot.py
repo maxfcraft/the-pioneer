@@ -52,14 +52,21 @@ def set_whale_detector(detector):
 def send_whale_alert(alert: WhaleAlert, trade_placed: bool, paper_mode: bool,
                      balance_cents: int = 0) -> bool:
     mode_tag = "[PAPER]" if paper_mode else "[LIVE]"
-    trade_status = "TRADE PLACED" if trade_placed else "ALERT ONLY"
-    if paper_mode:
-        trade_status = "PAPER MODE (no real trade)"
-
     whale_size_dollars = alert.trade_total_cents / 100
-    copy_amount = config.PAPER_COPY_AMOUNT_CENTS
-    copy_count = max(1, copy_amount // alert.trade_price_cents)
-    copy_cost_dollars = (copy_count * alert.trade_price_cents) / 100
+
+    # Build trade execution line based on mode
+    if paper_mode:
+        copy_amount = config.PAPER_COPY_AMOUNT_CENTS
+        copy_count = max(1, copy_amount // alert.trade_price_cents)
+        copy_cost = (copy_count * alert.trade_price_cents) / 100
+        trade_line = f"Paper Copy: {copy_count} contracts @ {alert.trade_price_cents}c = ${copy_cost:.2f}\n"
+    elif trade_placed:
+        risk_cents = int(balance_cents * config.PORTFOLIO_RISK_FRACTION)
+        live_count = max(1, risk_cents // alert.trade_price_cents)
+        live_cost = (live_count * alert.trade_price_cents) / 100
+        trade_line = f"LIVE ORDER PLACED: {live_count} contracts @ {alert.trade_price_cents}c = ${live_cost:.2f}\n"
+    else:
+        trade_line = f"ORDER FAILED — check alfred_log.txt for error details\n"
 
     message = (
         f"Master Bruce, we have a whale.\n"
@@ -79,7 +86,7 @@ def send_whale_alert(alert: WhaleAlert, trade_placed: bool, paper_mode: bool,
         f"Multiplier: {alert.multiplier}x average\n"
         f"Confidence: {alert.confidence_score}/100\n"
         f"\n"
-        f"Paper Copy: {copy_count} contracts @ {alert.trade_price_cents}c = ${copy_cost_dollars:.2f}\n"
+        f"{trade_line}"
         f"Tracking this. Results at 8 PM.\n"
         f"{'='*30}\n"
         f"\n"
