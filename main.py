@@ -292,6 +292,9 @@ def run_scan(client: KalshiClient, detector: WhaleDetector, tracker: ActivityTra
         print(f"  VOLUME SPIKE (logged): {spike.market_ticker} — {spike.new_trade_count} trades ({spike.spike_multiplier}x normal)")
     detector.last_volume_spikes.clear()
 
+    # Save seen IDs once per cycle (not per market — saves disk I/O)
+    detector.flush_seen_ids()
+
     # Update hourly market count
     detector.hourly_stats["markets_scanned"] = len(markets)
 
@@ -601,6 +604,7 @@ def main():
 
     # Main loop
     cycle = 0
+    last_error_telegram = 0  # throttle: only send error to Telegram every 30 min
     while True:
         cycle += 1
         timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
@@ -612,7 +616,10 @@ def main():
             raise
         except Exception as e:
             print(f"[ERROR] Scan cycle failed: {e}")
-            send_error_message(f"Scan cycle {cycle} failed: {e}")
+            now = time.time()
+            if now - last_error_telegram > 1800:
+                send_error_message(f"Scan cycle {cycle} failed: {e}")
+                last_error_telegram = now
             tracker.record_error()
 
         time.sleep(config.POLL_INTERVAL_SECONDS)

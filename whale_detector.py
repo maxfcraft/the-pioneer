@@ -97,8 +97,15 @@ class WhaleDetector:
             print(f"  [WARN] Could not load seen trades file: {e}")
 
     def _save_seen_ids(self):
-        """Persist seen trade IDs to disk."""
-        data = {ticker: list(ids) for ticker, ids in self.seen_trade_ids.items()}
+        """Persist seen trade IDs to disk (trimmed to prevent unbounded growth)."""
+        max_ids_per_market = 500
+        data = {}
+        for ticker, ids in self.seen_trade_ids.items():
+            id_list = list(ids)
+            if len(id_list) > max_ids_per_market:
+                id_list = id_list[-max_ids_per_market:]
+                self.seen_trade_ids[ticker] = set(id_list)
+            data[ticker] = id_list
         try:
             with open(config.SEEN_TRADES_FILE, "w") as f:
                 json.dump(data, f)
@@ -259,11 +266,15 @@ class WhaleDetector:
 
         self.hourly_stats["trades_analyzed"] += new_trade_count
 
-        # Persist seen IDs to disk after processing each market
-        if new_trade_count > 0:
-            self._save_seen_ids()
+        self._dirty = new_trade_count > 0 or getattr(self, '_dirty', False)
 
         return alerts
+
+    def flush_seen_ids(self):
+        """Save seen IDs to disk if any new trades were processed. Call once per scan cycle."""
+        if getattr(self, '_dirty', False):
+            self._save_seen_ids()
+            self._dirty = False
 
     def reset_hourly_stats(self):
         """Reset hourly accumulators. Called after sending the hourly briefing."""
